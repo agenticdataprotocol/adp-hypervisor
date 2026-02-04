@@ -50,15 +50,13 @@ This document defines the architecture and implementation plan for the ADP (Agen
 - Core JSON-RPC 2.0 protocol implementation
 - stdio transport for local process communication
 - RDBMS backend (PostgreSQL) as reference implementation
-- Vector backend (PostgreSQL + pgvector) as reference implementation
-- S3 backend (AWS/MinIO) as reference implementation
+- Vector backend (LanceDB) as reference implementation - AI-native, optimized for embedding workflows
 - Full support for 4 Intent types: LOOKUP, QUERY, INGEST, REVISE
 
 **Out of Scope (Future Phases)**:
-- SYNTHESIZE Intent support
-- HTTP/WebSocket transports
+- Streamable HTTP transport
 - Policy Enforcement (Enforcement Logic)
-- NoSQL and Graph backends
+- NoSQL backends (MongoDB), Graph backends, Object Storage (S3)
 - Multi-tenancy and authentication
 - Distributed deployment
 
@@ -113,7 +111,7 @@ Based on [curation.ts](../schema/2026-01-20/curation.ts), 5 backend types are de
 - **INGEST** - Create or append new data
 - **REVISE** - Update existing data
 
-*Note: SYNTHESIZE intent is deferred to future phases.*
+*Note: Intent types supported in Phase 1: LOOKUP, QUERY, INGEST, REVISE.*
 
 ---
 
@@ -131,8 +129,7 @@ Based on [curation.ts](../schema/2026-01-20/curation.ts), 5 backend types are de
 - **Interface**: `Transport` abstract base class
 - **Implementations**: 
   - `StdioTransport` (Phase 1) - Communication via stdin/stdout
-  - `HttpTransport` (Phase 2) - HTTP/HTTPS server
-  - `WebSocketTransport` (Future) - WebSocket bidirectional communication
+  - `StreamableHttpTransport` (Phase 2) - Streamable HTTP for server-side push events (following MCP's latest direction)
 
 #### 2.2.2 Protocol Layer (JsonRpcDispatcher)
 
@@ -157,8 +154,16 @@ Based on [curation.ts](../schema/2026-01-20/curation.ts), 5 backend types are de
 #### 2.2.5 Manifest Layer
 
 - **Responsibilities**: 
-  - Load and parse YAML configuration files
+  - Abstract interface for manifest operations (following curation.ts spec)
+  - Load and parse configuration files
   - Runtime resource discovery and metadata management
+- **Interface**: `ManifestProvider` abstract base class
+- **Default Implementation**: `YamlManifestProvider` - YAML-based configuration
+
+**When Manifests Are Used**:
+- **Physical Manifest**: Used during DISCOVER to list available data sources; provides connection details for backend initialization
+- **Semantic Manifest**: Used during DESCRIBE to provide entity schemas and field metadata; used during EXECUTE for intent parsing and query planning
+- **Policy Manifest**: Used during DISCOVER for visibility filtering; used during EXECUTE for access control and constraint enforcement
 
 ---
 
@@ -340,6 +345,7 @@ sequenceDiagram
     Manifest-->>Handler: UsageContract
     
     Handler->>Handler: Validate Intent against contract
+    Handler->>Handler: Check semantic definition
     Handler->>Handler: Apply policy rules
     
     Handler->>Backend: execute(intent)
@@ -355,12 +361,58 @@ sequenceDiagram
     Transport-->>Agent: Result
 ```
 
+#### 2.4.4 Discover (List) Sequence
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant ADP as ADP Client
+    participant DH as Data Hypervisor
+    participant Policy as Policy Engine
+    participant Catalog as Metadata Catalog
+
+    Agent ->> ADP: discover(filter?)
+    ADP ->> DH: DISCOVER request
+
+    DH ->> Catalog: list_entities()
+    Catalog -->> DH: all_entities
+
+    DH ->> Policy: apply_discover_policy(all_entities)
+    Policy -->> DH: authorized_entities + allowed_intents
+
+    DH -->> ADP: DISCOVER response
+    ADP -->> Agent: entities + intent classes
+```
+
+#### 2.4.5 Describe Sequence
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant ADP as ADP Client
+    participant DH as Data Hypervisor
+    participant Policy as Policy Engine
+    participant Schema as Schema Registry
+
+    Agent ->> ADP: describe(entity_id, intent_class)
+    ADP ->> DH: DESCRIBE request
+
+    DH ->> Policy: validate_discover_visibility(entity_id, intent_class)
+    Policy -->> DH: allowed
+
+    DH ->> Schema: load_intent_schema(entity_id, intent_class)
+    Schema -->> DH: intent_schema
+
+    DH -->> ADP: DESCRIBE response
+    ADP -->> Agent: intent schema + constraints
+```
+
 ---
 
 ## 3. Project Structure
 
 ```
-adp-server-python/
+adp-hypervisor/
 ├── pyproject.toml              # Project config and dependencies
 ├── README.md                   # Documentation
 ├── conf/                       # Configuration templates
@@ -378,7 +430,7 @@ adp-server-python/
 │       │   ├── __init__.py
 │       │   ├── base.py         # Transport abstract base class
 │       │   ├── stdio.py        # Stdio Transport
-│       │   └── http.py         # HTTP Transport (Phase 2)
+│       │   └── streamable_http.py  # Streamable HTTP Transport (Phase 2)
 │       │
 │       ├── protocol/           # Protocol layer
 │       │   ├── __init__.py
@@ -396,38 +448,36 @@ adp-server-python/
 │       │   ├── validate.py     # adp.validate
 │       │   └── execute.py      # adp.execute
 │       │
-│       ├── backends/           # Backend layer
-│       │   ├── __init__.py
-│       │   ├── base.py         # Backend abstract base class
-│       │   ├── registry.py     # Backend registry
-│       │   ├── rdbms/          # RDBMS backend
-│       │   │   ├── __init__.py
-│       │   │   ├── backend.py
-│       │   │   └── postgres.py
-│       │   ├── vector/         # Vector backend
-│       │   │   ├── __init__.py
-│       │   │   └── backend.py
-│       │   ├── s3/             # S3 backend
-│       │   │   ├── __init__.py
-│       │   │   └── backend.py
-│       │   ├── nosql/          # NoSQL backend
-│       │   │   ├── __init__.py
-│       │   │   └── backend.py
-│       │   └── graph/          # Graph backend
-│       │       ├── __init__.py
-│       │       └── backend.py
-│       │
 │       ├── manifest/           # Manifest layer
 │       │   ├── __init__.py
-│       │   ├── loader.py       # YAML loader
-│       │   ├── physical.py     # Physical Manifest
-│       │   ├── semantic.py     # Semantic Manifest
-│       │   └── policy.py       # Policy Manifest
+│       │   ├── base.py         # ManifestProvider abstract interface
+│       │   ├── yaml_provider.py  # YAML implementation (default)
+│       │   ├── physical.py     # Physical Manifest model
+│       │   ├── semantic.py     # Semantic Manifest model
+│       │   └── policy.py       # Policy Manifest model
 │       │
 │       └── utils/              # Utilities
 │           ├── __init__.py
 │           ├── logging.py      # Logging utilities
 │           └── credentials.py  # Credential management
+│
+├── backends/                   # Backend implementations (top-level, similar to Gravitino catalog)
+│   ├── __init__.py
+│   ├── base.py                 # Backend abstract base class
+│   ├── registry.py             # Backend registry
+│   ├── rdbms/                  # RDBMS backend
+│   │   ├── __init__.py
+│   │   ├── backend.py
+│   │   └── postgres.py
+│   ├── vector/                 # Vector backend (LanceDB)
+│   │   ├── __init__.py
+│   │   └── lancedb.py
+│   ├── nosql/                  # NoSQL backend (MongoDB) - Future
+│   │   ├── __init__.py
+│   │   └── mongodb.py
+│   └── graph/                  # Graph backend (Neo4j) - Future
+│       ├── __init__.py
+│       └── neo4j.py
 │
 └── tests/                      # Test directory
     ├── __init__.py
@@ -549,7 +599,6 @@ class IntentClass(str, Enum):
     QUERY = "QUERY"
     INGEST = "INGEST"
     REVISE = "REVISE"
-    SYNTHESIZE = "SYNTHESIZE"
     WILDCARD = "*"
 
 # Predicate Operators
@@ -615,9 +664,9 @@ Tasks are broken down by PR granularity to ensure each PR is independently revie
 - [ ] Configure GitHub Actions CI
 
 **Output Files**:
-- `adp-server-python/pyproject.toml`
-- `adp-server-python/src/adp_server/__init__.py`
-- `adp-server-python/.github/workflows/ci.yml`
+- `adp-hypervisor/pyproject.toml`
+- `adp-hypervisor/src/adp_server/__init__.py`
+- `adp-hypervisor/.github/workflows/ci.yml`
 
 ---
 
@@ -842,76 +891,48 @@ Tasks are broken down by PR granularity to ensure each PR is independently revie
 
 ---
 
-#### PR 1.14: Vector Backend (PostgreSQL + pgvector)
+#### PR 1.14: Vector Backend (LanceDB)
 **Estimated Time**: 3-4 hours
 **Dependencies**: PR 1.12
 
-- [ ] Implement `VectorBackend` using `pgvector`
-- [ ] Support SIMILAR operator
+- [ ] Implement `VectorBackend` using LanceDB
+- [ ] Support SIMILAR operator for semantic search
 - [ ] Add unit tests
-- [ ] Add integration tests with PostgreSQL + pgvector extension
+- [ ] Add integration tests with LanceDB
 
 **Output Files**:
-- `src/adp_server/backends/vector/__init__.py`
-- `src/adp_server/backends/vector/backend.py`
-- `src/adp_server/backends/vector/pgvector.py`
+- `backends/vector/__init__.py`
+- `backends/vector/lancedb.py`
 - `tests/unit/test_backend_vector.py`
 
 ---
 
-#### PR 1.15: S3 Backend
-**Estimated Time**: 3-4 hours
-**Dependencies**: PR 1.12
+### Phase 2: Extended Backends & Transports
 
-- [ ] Implement `S3Backend`
-- [ ] Support object listing and metadata queries
-- [ ] Add unit tests
-- [ ] Add integration tests with MinIO/LocalStack
-
-**Output Files**:
-- `src/adp_server/backends/s3/__init__.py`
-- `src/adp_server/backends/s3/backend.py`
-- `tests/unit/test_backend_s3.py`
-
----
-
-### Phase 2: HTTP Transport Extension
-
-#### PR 2.1: HTTP Transport
+#### PR 2.1: Streamable HTTP Transport
 **Estimated Time**: 4-5 hours  
 **Dependencies**: Phase 1 complete
 
-- [ ] Implement `HttpTransport`
+- [ ] Implement `StreamableHttpTransport`
   - Use FastAPI/Starlette as backend
-  - POST /jsonrpc endpoint
+  - POST /jsonrpc endpoint with streaming support
   - Health check endpoint
   - CORS support
 - [ ] Add unit tests
 - [ ] Add integration tests
 
 **Output Files**:
-- `src/adp_server/transport/http.py`
+- `src/adp_server/transport/streamable_http.py`
 - `tests/unit/test_transport_http.py`
 - `tests/integration/test_server_http.py`
 
 ---
 
----
-
-### Phase 2: HTTP Transport Extension
-
-#### PR 3.1: SYNTHESIZE Intent Support
-- [ ] Implement `SynthesizeHandler`
-- [ ] Add LLM integration for structure extraction
-
-#### PR 3.2: NoSQL Backend (MongoDB)
+#### PR 2.2: NoSQL Backend (MongoDB)
 - [ ] Implement `MongoDBBackend`
 
-#### PR 3.3: Graph Backend (Neo4j)
+#### PR 2.3: Graph Backend (Neo4j)
 - [ ] Implement `Neo4jBackend`
-
-#### PR 3.5: WebSocket Transport
-- [ ] Implement WebSocket bidirectional communication
 
 ---
 
@@ -1214,44 +1235,17 @@ def configure_logging(level: str = "INFO", json_format: bool = True):
     )
 ```
 
-### 11.3 Metrics
+### 11.3 Metrics (Future Phase)
 
-#### Key Metrics
+> **Note**: Detailed metrics implementation is deferred to future phases. Basic logging will be sufficient for Phase 1.
+
+#### Planned Key Metrics
 
 | Metric                        | Type      | Labels            | Purpose                     |
 | :---------------------------- | :-------- | :---------------- | :-------------------------- |
 | `adp_requests_total`           | Counter   | method, status    | Request volume              |
 | `adp_request_duration_seconds` | Histogram | method, backend   | Latency distribution       |
 | `adp_active_connections`       | Gauge     | transport         | Concurrent connections      |
-| `adp_backend_pool_size`        | Gauge     | backend, state    | Connection pool health      |
-| `adp_intent_rows_returned`     | Histogram | resource, intent  | Result set sizes            |
-| `adp_validation_issues_total`  | Counter   | severity, resource| Validation failures         |
-
-#### Metrics Implementation
-
-```python
-# src/adp_server/utils/metrics.py
-from prometheus_client import Counter, Histogram, Gauge
-
-REQUEST_COUNT = Counter(
-    'adp_requests_total',
-    'Total ADP requests',
-    ['method', 'status']
-)
-
-REQUEST_LATENCY = Histogram(
-    'adp_request_duration_seconds',
-    'Request latency in seconds',
-    ['method', 'backend'],
-    buckets=[.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10]
-)
-
-ACTIVE_CONNECTIONS = Gauge(
-    'adp_active_connections',
-    'Number of active connections',
-    ['transport']
-)
-```
 
 ### 11.4 Health Checks
 
@@ -1404,3 +1398,4 @@ observability:
 | 2026-01-20 | 1.0     | ADP Team | Initial design document                                        |
 | 2026-02-03 | 1.1     | ADP Team | Added ADRs, sequence diagrams, error handling, observability   |
 | 2026-02-03 | 1.2     | ADP Team | Updated Scope (Vector/S3 to Phase 1), removed SYNTHESIZE from MVP, added ADP Client role |
+| 2026-02-04 | 1.3     | ADP Team | Renamed to adp-hypervisor, replaced pgvector with LanceDB, deferred S3, updated transport to Streamable HTTP |
