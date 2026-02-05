@@ -1,5 +1,6 @@
 """ADP Protocol type definitions and error handling."""
 
+from adp_hypervisor.protocol.dispatcher import Dispatcher, Handler
 from adp_hypervisor.protocol.errors import (
     EXECUTION_FAILED,
     INTERNAL_ERROR,
@@ -195,4 +196,7 @@ __all__ = [
     "UnauthorizedError",
     "ExecutionFailedError",
     "error_from_code",
+    # Dispatcher
+    "Dispatcher",
+    "Handler",
 ]
