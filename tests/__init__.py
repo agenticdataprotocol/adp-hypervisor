@@ -1,1 +1,1 @@
-"""ADP Server test suite."""
+"""ADP Hypervisor test suite."""

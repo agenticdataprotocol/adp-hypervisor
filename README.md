@@ -71,8 +71,8 @@ uv run mypy src/
 ```
 adp-hypervisor/
 ├── pyproject.toml          # Project configuration
-├── src/adp_server/         # Main server package
-├── backends/               # Backend implementations
+├── src/adp_hypervisor/     # Main hypervisor package
+├── src/backends/           # Backend implementations
 └── tests/                  # Test suite
 ```
 

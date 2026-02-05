@@ -1,6 +1,6 @@
-"""Basic tests for adp_server package."""
+"""Basic tests for adp_hypervisor package."""
 
-from adp_server import __version__
+from adp_hypervisor import __version__
 
 
 def test_version() -> None:
