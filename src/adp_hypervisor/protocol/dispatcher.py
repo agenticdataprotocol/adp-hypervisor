@@ -265,9 +265,7 @@ class Dispatcher:
         except ValidationError as e:
             raise InvalidRequestError(f"Invalid request: {e}") from e
 
-    def build_response(
-        self, request_id: RequestId, result: BaseModel
-    ) -> JSONRPCResultResponse:
+    def build_response(self, request_id: RequestId, result: BaseModel) -> JSONRPCResultResponse:
         """
         Build a JSON-RPC success response.
 
@@ -285,9 +283,7 @@ class Dispatcher:
             result=result.model_dump(by_alias=True, exclude_none=True),
         )
 
-    def build_error(
-        self, request_id: RequestId | None, error: ADPError
-    ) -> JSONRPCErrorResponse:
+    def build_error(self, request_id: RequestId | None, error: ADPError) -> JSONRPCErrorResponse:
         """
         Build a JSON-RPC error response.
 
