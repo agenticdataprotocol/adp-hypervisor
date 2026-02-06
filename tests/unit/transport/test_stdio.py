@@ -251,7 +251,8 @@ class TestStdioTransportRoundTrip:
             write_transport, protocol, shared_reader, loop  # type: ignore[arg-type]
         )
 
-        sender = StdioTransport(stdin=asyncio.StreamReader(), stdout=shared_writer)
+        sender_stdin, _ = _make_streams()
+        sender = StdioTransport(stdin=sender_stdin, stdout=shared_writer)
         await sender.start()
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "adp.ping"})

@@ -39,6 +39,9 @@ class StdioTransport(Transport):
         self._stdin = stdin
         self._stdout = stdout
         self._running = False
+        # Underlying transports for stdin/stdout pipes, used for cleanup in stop()
+        self._read_transport: asyncio.BaseTransport | None = None
+        self._write_transport: asyncio.BaseTransport | None = None
 
     async def start(self) -> None:
         """Start the transport by connecting to stdin/stdout streams."""
@@ -60,8 +63,9 @@ class StdioTransport(Transport):
                 asyncio.BaseProtocol,
                 sys.stdout,
             )
+            self._write_transport = transport_w[0]
             self._stdout = asyncio.StreamWriter(
-                transport_w[0],
+                self._write_transport,
                 asyncio.BaseProtocol(),
                 None,
                 loop,
@@ -74,6 +78,14 @@ class StdioTransport(Transport):
         """Stop the transport."""
         if not self._running:
             return
+
+        # Close the underlying transports to release the stdin/stdout pipes.
+        if self._read_transport is not None:
+            self._read_transport.close()
+            self._read_transport = None
+        if self._write_transport is not None:
+            self._write_transport.close()
+            self._write_transport = None
 
         self._running = False
         logger.info("Stdio transport stopped")
