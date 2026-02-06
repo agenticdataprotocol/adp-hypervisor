@@ -9,7 +9,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
@@ -30,9 +30,6 @@ from adp_hypervisor.protocol.jsonrpc import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Type variable for handler result types
-TResult = TypeVar("TResult", bound=BaseModel)
 
 
 class Handler(ABC):
