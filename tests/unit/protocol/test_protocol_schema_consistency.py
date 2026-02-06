@@ -18,6 +18,7 @@ from pydantic.alias_generators import to_camel
 
 from adp_hypervisor import protocol
 from adp_hypervisor.protocol import (
+    LATEST_PROTOCOL_VERSION,
     Capabilities,
     ClientCapabilities,
     DescribeResult,
@@ -26,11 +27,11 @@ from adp_hypervisor.protocol import (
     InitializeRequest,
     InitializeRequestParams,
     IntentClass,
-    LATEST_PROTOCOL_VERSION,
     UsageContract,
 )
 
-# Schema path: schema/adp-protocol-{version}.json at project root (version from LATEST_PROTOCOL_VERSION)
+# Schema path: schema/adp-protocol-{version}.json at project root
+# (version from LATEST_PROTOCOL_VERSION)
 _SCHEMA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "schema"
 SCHEMA_PATH = _SCHEMA_DIR / f"adp-protocol-{LATEST_PROTOCOL_VERSION}.json"
 
@@ -97,7 +98,9 @@ class TestProtocolSchemaConsistency:
                 continue
             schema_values = set(defn["enum"])
             py_type = self._get_python_type(name)
-            assert py_type is not None, f"Schema enum {name} has no Python type (coverage should have failed)"
+            assert (
+                py_type is not None
+            ), f"Schema enum {name} has no Python type (coverage should have failed)"
             if not isinstance(py_type, type) or not issubclass(py_type, StrEnum):
                 continue
             py_values = {m.value for m in py_type}
@@ -133,7 +136,8 @@ class TestProtocolSchemaConsistency:
 
             missing_required_as_props = schema_required - py_protocol_names
             assert not missing_required_as_props, (
-                f"Object type {name}: schema required fields {missing_required_as_props} missing in Python model. "
+                f"Object type {name}: schema required fields "
+                f"{missing_required_as_props} missing in Python model. "
                 f"Protocol field names: {py_protocol_names}"
             )
 
@@ -184,9 +188,7 @@ class TestProtocolSchemaConsistency:
         """Return $defs from schema."""
         return schema.get("$defs", {})
 
-    def _schema_def_names(
-        self, schema: dict, *, exclude: set[str] | None = None
-    ) -> list[str]:
+    def _schema_def_names(self, schema: dict, *, exclude: set[str] | None = None) -> list[str]:
         """Return sorted list of $defs keys, excluding given names."""
         defs = self._get_schema_defs(schema)
         excl = exclude or set()
