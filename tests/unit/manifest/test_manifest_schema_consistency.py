@@ -36,8 +36,9 @@ PHYSICAL_SCHEMA_PATH = _SCHEMA_DIR / f"adp-physical-manifest-{LATEST_MANIFEST_SC
 SEMANTIC_SCHEMA_PATH = _SCHEMA_DIR / f"adp-semantic-manifest-{LATEST_MANIFEST_SCHEMA_VERSION}.json"
 POLICY_SCHEMA_PATH = _SCHEMA_DIR / f"adp-policy-manifest-{LATEST_MANIFEST_SCHEMA_VERSION}.json"
 
-# Schema $defs keys that do not require a Python type (generic or alias-only in schema)
-SCHEMA_DEFS_EXCLUDED = {"Request", "Record<string,unknown>"}
+# Schema $defs keys that do not require a Python type (generic or alias-only in schema).
+# "Backend" is mapped to BackendDefinition in Python to avoid collision with backends.base.Backend.
+SCHEMA_DEFS_EXCLUDED = {"Request", "Record<string,unknown>", "Backend"}
 
 
 class TestManifestSchemaConsistency(unittest.TestCase):

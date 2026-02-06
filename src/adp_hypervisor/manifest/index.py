@@ -19,7 +19,7 @@ import logging
 import threading
 from fnmatch import fnmatch
 
-from adp_hypervisor.manifest.physical import Backend
+from adp_hypervisor.manifest.physical import BackendDefinition
 from adp_hypervisor.manifest.policy import ResourcePolicy
 from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.manifest.semantic import CuratedResource
@@ -40,7 +40,7 @@ class ManifestIndex:
         self._provider = provider
         self._lock = threading.RLock()
 
-        self._backends_by_id: dict[str, Backend] = {}
+        self._backends_by_id: dict[str, BackendDefinition] = {}
         self._resources_by_id: dict[str, list[CuratedResource]] = {}
         self._policies_by_id: dict[str, ResourcePolicy] = {}
         self._indexes_built = False
@@ -61,12 +61,12 @@ class ManifestIndex:
 
     # Backends ---------------------------------------------------------
 
-    def get_backend(self, backend_id: str) -> Backend | None:
+    def get_backend(self, backend_id: str) -> BackendDefinition | None:
         """Get a backend definition by id."""
         self._ensure_indexes()
         return self._backends_by_id.get(backend_id)
 
-    def list_backends(self) -> list[Backend]:
+    def list_backends(self) -> list[BackendDefinition]:
         """Return all backend definitions."""
         self._ensure_indexes()
         return list(self._backends_by_id.values())
@@ -152,7 +152,7 @@ class ManifestIndex:
 
             # Build new indexes in local variables so readers never see
             # partially-populated dictionaries.
-            backends_by_id: dict[str, Backend] = {b.id: b for b in physical.backends}
+            backends_by_id: dict[str, BackendDefinition] = {b.id: b for b in physical.backends}
 
             resources_by_id: dict[str, list[CuratedResource]] = {}
             for r in semantic.resources or []:
