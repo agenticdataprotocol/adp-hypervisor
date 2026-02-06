@@ -176,6 +176,65 @@ class Dispatcher:
             return response.model_dump_json(by_alias=True)
         return response.model_dump_json(by_alias=True, exclude_none=True)
 
+    def parse_request(self, message: str) -> JSONRPCRequest:
+        """
+        Parse a JSON-RPC request message.
+
+        This is a utility method for parsing requests without dispatching.
+
+        Args:
+            message: The raw JSON-RPC message string.
+
+        Returns:
+            The parsed JSON-RPC request.
+
+        Raises:
+            ParseError: If the message is not valid JSON.
+            InvalidRequestError: If the message is not a valid JSON-RPC request.
+        """
+        try:
+            data = json.loads(message)
+        except json.JSONDecodeError as e:
+            raise ParseError(f"Invalid JSON: {e}") from e
+
+        try:
+            return JSONRPCRequest.model_validate(data)
+        except ValidationError as e:
+            raise InvalidRequestError(f"Invalid request: {e}") from e
+
+    def build_response(self, request_id: RequestId, result: BaseModel) -> JSONRPCResultResponse:
+        """
+        Build a JSON-RPC success response.
+
+        This is a utility method for building responses manually.
+
+        Args:
+            request_id: The request ID.
+            result: The result model.
+
+        Returns:
+            A JSON-RPC success response.
+        """
+        return JSONRPCResultResponse(
+            id=request_id,
+            result=result.model_dump(by_alias=True, exclude_none=True),
+        )
+
+    def build_error(self, request_id: RequestId | None, error: ADPError) -> JSONRPCErrorResponse:
+        """
+        Build a JSON-RPC error response.
+
+        This is a utility method for building error responses manually.
+
+        Args:
+            request_id: The request ID (may be None).
+            error: The ADP error.
+
+        Returns:
+            A JSON-RPC error response.
+        """
+        return self._build_error_response(request_id, error)
+
     async def _route(self, request: JSONRPCRequest) -> BaseModel:
         """
         Route a request to the appropriate handler.
@@ -238,62 +297,3 @@ class Dispatcher:
                 data=error.data,
             ),
         )
-
-    def parse_request(self, message: str) -> JSONRPCRequest:
-        """
-        Parse a JSON-RPC request message.
-
-        This is a utility method for parsing requests without dispatching.
-
-        Args:
-            message: The raw JSON-RPC message string.
-
-        Returns:
-            The parsed JSON-RPC request.
-
-        Raises:
-            ParseError: If the message is not valid JSON.
-            InvalidRequestError: If the message is not a valid JSON-RPC request.
-        """
-        try:
-            data = json.loads(message)
-        except json.JSONDecodeError as e:
-            raise ParseError(f"Invalid JSON: {e}") from e
-
-        try:
-            return JSONRPCRequest.model_validate(data)
-        except ValidationError as e:
-            raise InvalidRequestError(f"Invalid request: {e}") from e
-
-    def build_response(self, request_id: RequestId, result: BaseModel) -> JSONRPCResultResponse:
-        """
-        Build a JSON-RPC success response.
-
-        This is a utility method for building responses manually.
-
-        Args:
-            request_id: The request ID.
-            result: The result model.
-
-        Returns:
-            A JSON-RPC success response.
-        """
-        return JSONRPCResultResponse(
-            id=request_id,
-            result=result.model_dump(by_alias=True, exclude_none=True),
-        )
-
-    def build_error(self, request_id: RequestId | None, error: ADPError) -> JSONRPCErrorResponse:
-        """
-        Build a JSON-RPC error response.
-
-        This is a utility method for building error responses manually.
-
-        Args:
-            request_id: The request ID (may be None).
-            error: The ADP error.
-
-        Returns:
-            A JSON-RPC error response.
-        """
-        return self._build_error_response(request_id, error)
