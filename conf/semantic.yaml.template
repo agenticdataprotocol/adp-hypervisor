@@ -1,0 +1,28 @@
+# Semantic Manifest Template
+# Maps physical data sources to ADP resources
+#
+# Copy this file as semantic.yaml and customize for your environment.
+
+version: "1.0.0"
+defaultDomain: "com.example"
+
+resources:
+  - resourceId: "com.example:my_table"
+    intentClasses: ["QUERY"]
+    version: 1
+    description: "My table resource"
+    backendId: "my_database"
+    sources:
+      - source: "my_table"
+        fields:
+          - fieldId: "id"
+            type: "STRING"
+            description: "Primary key"
+          - fieldId: "name"
+            type: "STRING"
+            description: "Name field"
+
+# Bootstrap Mode - Uncomment for auto-discovery:
+# version: "1.0.0"
+# defaultDomain: "com.example"
+# # No resources needed - all will be auto-discovered from physical.yaml

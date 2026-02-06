@@ -1,0 +1,39 @@
+# Physical Manifest Template
+# Defines the physical backends (data sources) for ADP curation
+#
+# Copy this file as physical.yaml and customize for your environment.
+
+version: "1.0.0"
+
+backends:
+  # RDBMS Backend Example
+  - id: "my_database"
+    type: "RDBMS"
+    config:
+      type: "RDBMS"
+      uri: "postgresql://localhost:5432/mydb"
+      schema: "public"
+    credentials:
+      type: "env"
+      key: "DB_PASSWORD"
+
+  # Vector Backend Example
+  # - id: "my_vectors"
+  #   type: "VECTOR"
+  #   config:
+  #     type: "VECTOR"
+  #     provider: "PINECONE"
+  #     indexName: "my-index"
+  #     endpoint: "https://api.pinecone.io"
+  #   credentials:
+  #     type: "secret"
+  #     manager: "AWS_SECRETS_MANAGER"
+  #     key: "production/pinecone-api-key"
+
+  # S3 Backend Example
+  # - id: "my_storage"
+  #   type: "S3"
+  #   config:
+  #     type: "S3"
+  #     uri: "s3://my-bucket/"
+  #     region: "us-east-1"
