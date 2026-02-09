@@ -2,8 +2,8 @@
 Backend abstract base class.
 
 Defines the abstract interface that all ADP backend implementations must follow.
-Each backend handles connection management, schema discovery, intent validation,
-and intent execution for a specific data source type.
+Each backend handles connection management, intent validation, and intent
+execution for a specific data source type.
 """
 
 import logging
@@ -13,7 +13,6 @@ from typing import Any
 
 from adp_hypervisor.manifest.physical import BackendDefinition
 from adp_hypervisor.protocol.types import (
-    Field,
     Intent,
     ValidationIssue,
 )
@@ -38,8 +37,8 @@ class Backend(ABC):
     """Abstract base class for all ADP backends.
 
     A backend is responsible for interacting with a specific data source type
-    (e.g., RDBMS, Vector DB). It handles connection lifecycle, schema discovery,
-    intent validation, and intent execution.
+    (e.g., RDBMS, Vector DB). It handles connection lifecycle, intent
+    validation, and intent execution.
 
     Subclasses must implement all abstract methods.
     """
@@ -68,17 +67,6 @@ class Backend(ABC):
     @abstractmethod
     async def disconnect(self) -> None:
         """Close the connection and release resources."""
-
-    @abstractmethod
-    async def get_schema(self, source: str) -> list[Field]:
-        """Get the schema (field definitions) for a data source.
-
-        Args:
-            source: The source identifier (e.g., table name, collection name).
-
-        Returns:
-            A list of field definitions describing the source schema.
-        """
 
     @abstractmethod
     async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
