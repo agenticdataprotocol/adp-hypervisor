@@ -120,6 +120,4 @@ class PhysicalManifest(ADPModel):
     """Root structure for the physical manifest (physical.yaml)."""
 
     version: str = PydanticField(..., description="Version of the manifest schema")
-    backends: list[Backend] = PydanticField(
-        ..., description="List of backend definitions"
-    )
+    backends: list[Backend] = PydanticField(..., description="List of backend definitions")
