@@ -2,8 +2,8 @@
 
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.physical import (
-    Backend,
     BackendConfig,
+    BackendDefinition,
     BackendType,
     CredentialReference,
     GraphBackendConfig,
@@ -47,7 +47,7 @@ __all__ = [
     "S3BackendConfig",
     "NOSQLBackendConfig",
     "GraphBackendConfig",
-    "Backend",
+    "BackendDefinition",
     "BackendConfig",
     "PhysicalManifest",
     # Semantic

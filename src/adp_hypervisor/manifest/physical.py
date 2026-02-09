@@ -102,7 +102,7 @@ BackendConfig = Annotated[
 """Backend-specific configuration, discriminated by type."""
 
 
-class Backend(ADPModel):
+class BackendDefinition(ADPModel):
     """Definition of a physical backend data source."""
 
     id: str = PydanticField(..., description="Unique identifier for this backend")
@@ -120,4 +120,6 @@ class PhysicalManifest(ADPModel):
     """Root structure for the physical manifest (physical.yaml)."""
 
     version: str = PydanticField(..., description="Version of the manifest schema")
-    backends: list[Backend] = PydanticField(..., description="List of backend definitions")
+    backends: list[BackendDefinition] = PydanticField(
+        ..., description="List of backend definitions"
+    )

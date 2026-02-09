@@ -3,7 +3,7 @@
 import unittest
 
 from adp_hypervisor.manifest.physical import (
-    Backend,
+    BackendDefinition,
     BackendType,
     CredentialReference,
     GraphBackendConfig,
@@ -101,7 +101,7 @@ class TestBackendConfigs(unittest.TestCase):
 
 class TestBackend(unittest.TestCase):
     def test_rdbms_backend(self) -> None:
-        backend = Backend.model_validate(
+        backend = BackendDefinition.model_validate(
             {
                 "id": "finance_sql",
                 "type": "RDBMS",
@@ -120,7 +120,7 @@ class TestBackend(unittest.TestCase):
         self.assertEqual(backend.credentials.type, "env")
 
     def test_vector_backend(self) -> None:
-        backend = Backend.model_validate(
+        backend = BackendDefinition.model_validate(
             {
                 "id": "vectors",
                 "type": "VECTOR",
@@ -136,7 +136,7 @@ class TestBackend(unittest.TestCase):
         self.assertIsNone(backend.credentials)
 
     def test_backend_with_metadata(self) -> None:
-        backend = Backend.model_validate(
+        backend = BackendDefinition.model_validate(
             {
                 "id": "db",
                 "type": "RDBMS",
