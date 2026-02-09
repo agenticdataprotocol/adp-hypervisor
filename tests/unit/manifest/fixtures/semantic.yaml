@@ -1,0 +1,96 @@
+# Test fixture: Semantic Manifest
+version: "1.0.0"
+defaultDomain: "com.acme.finance"
+
+resources:
+  - resourceId: "com.acme.finance:bank_failures"
+    intentClasses: ["QUERY"]
+    version: 1
+    description: "Bank failure records from FDIC"
+    semanticDescription: "Historical records of bank failures."
+    tags:
+      - "FINANCE"
+      - "REGULATORY"
+    backendId: "finance_sql"
+    sources:
+      - source: "v_failures_consolidated"
+        fields:
+          - fieldId: "bank_id"
+            type: "STRING"
+            description: "FDIC Certificate Number"
+            isSearchable: false
+          - fieldId: "bank_name"
+            type: "STRING"
+            description: "Name of the failed bank"
+            isSearchable: true
+          - fieldId: "closing_date"
+            type: "DATE"
+            description: "The date the institution was closed."
+
+  # Multi-version resource: version 1
+  - resourceId: "com.acme.finance:audit_events"
+    version: 1
+    intentClasses: ["QUERY"]
+    description: "Audit events (v1)"
+    backendId: "finance_sql"
+    sources:
+      - source: "audit_events"
+        fields:
+          - fieldId: "event_id"
+            type: "STRING"
+            description: "Unique event identifier"
+          - fieldId: "event_type"
+            type: "STRING"
+            description: "Type of audit event"
+
+  # Multi-version resource: version 2
+  - resourceId: "com.acme.finance:audit_events"
+    version: 2
+    intentClasses: ["QUERY"]
+    description: "Audit events (v2 - with actor)"
+    backendId: "finance_sql"
+    sources:
+      - source: "audit_events"
+        fields:
+          - fieldId: "event_id"
+            type: "STRING"
+            description: "Unique event identifier"
+          - fieldId: "event_type"
+            type: "STRING"
+            description: "Type of audit event"
+          - fieldId: "actor_id"
+            type: "STRING"
+            description: "ID of the actor (v2)"
+
+  # Wildcard intent class
+  - resourceId: "com.acme.finance:universal_resource"
+    intentClasses: ["*"]
+    version: 1
+    description: "Universal resource"
+    backendId: "finance_sql"
+    sources:
+      - source: "universal_table"
+        fields:
+          - fieldId: "id"
+            type: "STRING"
+            description: "Unique identifier"
+
+  # Vector resource
+  - resourceId: "com.acme.finance:failure_vectors"
+    intentClasses: ["QUERY"]
+    version: 1
+    description: "Vector embeddings of bank failure summaries"
+    backendId: "report_vectors"
+    sources:
+      - source: "bank-summaries"
+        fields:
+          - fieldId: "summary_embedding"
+            type: "VECTOR"
+            description: "Vector embedding"
+            metadata:
+              vector:
+                dimensions: 1536
+                distanceFunction: "COSINE"
+          - fieldId: "bank_id"
+            type: "STRING"
+            description: "Reference to the bank record"

@@ -2,8 +2,7 @@
 
 import asyncio
 import json
-
-import pytest
+import unittest
 
 from adp_hypervisor.transport.stdio import StdioTransport
 
@@ -51,34 +50,34 @@ class _MemoryWriteTransport(asyncio.Transport):
 # =============================================================================
 
 
-class TestStdioTransportLifecycle:
+class TestStdioTransportLifecycle(unittest.IsolatedAsyncioTestCase):
     """Tests for transport start/stop behavior."""
 
     async def test_start_with_injected_streams(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
         await transport.start()
-        assert transport._running is True
+        self.assertTrue(transport._running)
 
     async def test_start_is_idempotent(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
         await transport.start()
         await transport.start()
-        assert transport._running is True
+        self.assertTrue(transport._running)
 
     async def test_stop(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
         await transport.start()
         await transport.stop()
-        assert transport._running is False
+        self.assertFalse(transport._running)
 
     async def test_stop_when_not_started(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
         await transport.stop()
-        assert transport._running is False
+        self.assertFalse(transport._running)
 
 
 # =============================================================================
@@ -86,7 +85,7 @@ class TestStdioTransportLifecycle:
 # =============================================================================
 
 
-class TestStdioTransportSend:
+class TestStdioTransportSend(unittest.IsolatedAsyncioTestCase):
     """Tests for sending messages."""
 
     async def test_send_appends_newline(self) -> None:
@@ -99,8 +98,8 @@ class TestStdioTransportSend:
         await transport.send(msg)
 
         output = write_transport.buffer.decode("utf-8")
-        assert output.endswith("\n")
-        assert output.strip() == msg
+        self.assertTrue(output.endswith("\n"))
+        self.assertEqual(output.strip(), msg)
 
     async def test_send_strips_extra_trailing_newline(self) -> None:
         reader, writer = _make_streams()
@@ -113,11 +112,11 @@ class TestStdioTransportSend:
 
         output = write_transport.buffer.decode("utf-8")
         # Should have exactly one trailing newline, not two
-        assert output == '{"jsonrpc":"2.0","id":1,"result":{}}\n'
+        self.assertEqual(output, '{"jsonrpc":"2.0","id":1,"result":{}}\n')
 
     async def test_send_without_start_raises(self) -> None:
         transport = StdioTransport()
-        with pytest.raises(RuntimeError, match="Transport not started"):
+        with self.assertRaisesRegex(RuntimeError, "Transport not started"):
             await transport.send("test")
 
     async def test_send_multiple_messages(self) -> None:
@@ -132,9 +131,9 @@ class TestStdioTransportSend:
 
         output = write_transport.buffer.decode("utf-8")
         lines = output.strip().split("\n")
-        assert len(lines) == 3
+        self.assertEqual(len(lines), 3)
         for i, line in enumerate(lines):
-            assert json.loads(line)["id"] == i
+            self.assertEqual(json.loads(line)["id"], i)
 
 
 # =============================================================================
@@ -142,7 +141,7 @@ class TestStdioTransportSend:
 # =============================================================================
 
 
-class TestStdioTransportReceive:
+class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
     """Tests for receiving messages."""
 
     async def test_receive_single_message(self) -> None:
@@ -158,8 +157,8 @@ class TestStdioTransportReceive:
         async for message in transport.receive():
             received.append(message)
 
-        assert len(received) == 1
-        assert json.loads(received[0])["method"] == "test"
+        self.assertEqual(len(received), 1)
+        self.assertEqual(json.loads(received[0])["method"], "test")
 
     async def test_receive_multiple_messages(self) -> None:
         reader, writer = _make_streams()
@@ -177,9 +176,9 @@ class TestStdioTransportReceive:
         async for message in transport.receive():
             received.append(message)
 
-        assert len(received) == 3
+        self.assertEqual(len(received), 3)
         for i, msg in enumerate(received):
-            assert json.loads(msg)["method"] == f"test.{i}"
+            self.assertEqual(json.loads(msg)["method"], f"test.{i}")
 
     async def test_receive_skips_empty_lines(self) -> None:
         reader, writer = _make_streams()
@@ -195,7 +194,7 @@ class TestStdioTransportReceive:
         async for message in transport.receive():
             received.append(message)
 
-        assert len(received) == 1
+        self.assertEqual(len(received), 1)
 
     async def test_receive_handles_eof(self) -> None:
         reader, writer = _make_streams()
@@ -208,11 +207,11 @@ class TestStdioTransportReceive:
         async for message in transport.receive():
             received.append(message)
 
-        assert len(received) == 0
+        self.assertEqual(len(received), 0)
 
     async def test_receive_without_start_raises(self) -> None:
         transport = StdioTransport()
-        with pytest.raises(RuntimeError, match="Transport not started"):
+        with self.assertRaisesRegex(RuntimeError, "Transport not started"):
             async for _ in transport.receive():
                 pass
 
@@ -229,7 +228,7 @@ class TestStdioTransportReceive:
             received.append(message)
             await transport.stop()
 
-        assert len(received) == 1
+        self.assertEqual(len(received), 1)
 
 
 # =============================================================================
@@ -237,7 +236,7 @@ class TestStdioTransportReceive:
 # =============================================================================
 
 
-class TestStdioTransportRoundTrip:
+class TestStdioTransportRoundTrip(unittest.IsolatedAsyncioTestCase):
     """Tests for full send/receive round-trip."""
 
     async def test_send_then_receive(self) -> None:
@@ -269,6 +268,6 @@ class TestStdioTransportRoundTrip:
         async for message in receiver.receive():
             received.append(message)
 
-        assert len(received) == 1
+        self.assertEqual(len(received), 1)
         parsed = json.loads(received[0])
-        assert parsed["method"] == "adp.ping"
+        self.assertEqual(parsed["method"], "adp.ping")

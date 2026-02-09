@@ -1,0 +1,3 @@
+# Test fixture: Policy Manifest - Bootstrap Mode
+version: "1.0.0"
+# No policies - bootstrap mode (no enforcements)

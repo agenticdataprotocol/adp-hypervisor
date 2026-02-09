@@ -1,6 +1,7 @@
 """Unit tests for ADP protocol type definitions."""
 
-import pytest
+import unittest
+
 from pydantic import ValidationError
 
 from adp_hypervisor.protocol import (
@@ -80,157 +81,159 @@ from adp_hypervisor.protocol import (
 )
 
 
-class TestConstants:
+class TestConstants(unittest.TestCase):
     """Tests for protocol constants."""
 
     def test_protocol_version(self) -> None:
-        assert LATEST_PROTOCOL_VERSION == "2026-01-20"
+        self.assertEqual(LATEST_PROTOCOL_VERSION, "2026-01-20")
 
     def test_jsonrpc_version(self) -> None:
-        assert JSONRPC_VERSION == "2.0"
+        self.assertEqual(JSONRPC_VERSION, "2.0")
 
 
-class TestEnums:
+class TestEnums(unittest.TestCase):
     """Tests for protocol enums."""
 
     def test_intent_class_values(self) -> None:
-        assert IntentClass.LOOKUP.value == "LOOKUP"
-        assert IntentClass.QUERY.value == "QUERY"
-        assert IntentClass.INGEST.value == "INGEST"
-        assert IntentClass.REVISE.value == "REVISE"
-        assert IntentClass.WILDCARD.value == "*"
+        self.assertEqual(IntentClass.LOOKUP.value, "LOOKUP")
+        self.assertEqual(IntentClass.QUERY.value, "QUERY")
+        self.assertEqual(IntentClass.INGEST.value, "INGEST")
+        self.assertEqual(IntentClass.REVISE.value, "REVISE")
+        self.assertEqual(IntentClass.WILDCARD.value, "*")
 
     def test_predicate_operator_values(self) -> None:
-        assert PredicateOperator.EQ.value == "EQ"
-        assert PredicateOperator.NEQ.value == "NEQ"
-        assert PredicateOperator.GT.value == "GT"
-        assert PredicateOperator.LT.value == "LT"
-        assert PredicateOperator.GTE.value == "GTE"
-        assert PredicateOperator.LTE.value == "LTE"
-        assert PredicateOperator.CONTAINS.value == "CONTAINS"
-        assert PredicateOperator.IN.value == "IN"
-        assert PredicateOperator.LIKE.value == "LIKE"
-        assert PredicateOperator.ILIKE.value == "ILIKE"
-        assert PredicateOperator.SIMILAR.value == "SIMILAR"
+        self.assertEqual(PredicateOperator.EQ.value, "EQ")
+        self.assertEqual(PredicateOperator.NEQ.value, "NEQ")
+        self.assertEqual(PredicateOperator.GT.value, "GT")
+        self.assertEqual(PredicateOperator.LT.value, "LT")
+        self.assertEqual(PredicateOperator.GTE.value, "GTE")
+        self.assertEqual(PredicateOperator.LTE.value, "LTE")
+        self.assertEqual(PredicateOperator.CONTAINS.value, "CONTAINS")
+        self.assertEqual(PredicateOperator.IN.value, "IN")
+        self.assertEqual(PredicateOperator.LIKE.value, "LIKE")
+        self.assertEqual(PredicateOperator.ILIKE.value, "ILIKE")
+        self.assertEqual(PredicateOperator.SIMILAR.value, "SIMILAR")
 
     def test_logic_operator_values(self) -> None:
-        assert LogicOperator.AND.value == "AND"
-        assert LogicOperator.OR.value == "OR"
-        assert LogicOperator.NOT.value == "NOT"
+        self.assertEqual(LogicOperator.AND.value, "AND")
+        self.assertEqual(LogicOperator.OR.value, "OR")
+        self.assertEqual(LogicOperator.NOT.value, "NOT")
 
     def test_issue_severity_values(self) -> None:
-        assert IssueSeverity.BLOCKING.value == "BLOCKING"
-        assert IssueSeverity.WARNING.value == "WARNING"
+        self.assertEqual(IssueSeverity.BLOCKING.value, "BLOCKING")
+        self.assertEqual(IssueSeverity.WARNING.value, "WARNING")
 
     def test_consistency_level_values(self) -> None:
-        assert ConsistencyLevel.STRONG.value == "STRONG"
-        assert ConsistencyLevel.EVENTUAL.value == "EVENTUAL"
+        self.assertEqual(ConsistencyLevel.STRONG.value, "STRONG")
+        self.assertEqual(ConsistencyLevel.EVENTUAL.value, "EVENTUAL")
 
     def test_field_type_values(self) -> None:
-        assert FieldType.STRING.value == "STRING"
-        assert FieldType.INTEGER.value == "INTEGER"
-        assert FieldType.FLOAT.value == "FLOAT"
-        assert FieldType.BOOLEAN.value == "BOOLEAN"
-        assert FieldType.DATE.value == "DATE"
-        assert FieldType.TIMESTAMP.value == "TIMESTAMP"
-        assert FieldType.VECTOR.value == "VECTOR"
-        assert FieldType.BLOB.value == "BLOB"
-        assert FieldType.JSON.value == "JSON"
+        self.assertEqual(FieldType.STRING.value, "STRING")
+        self.assertEqual(FieldType.INTEGER.value, "INTEGER")
+        self.assertEqual(FieldType.FLOAT.value, "FLOAT")
+        self.assertEqual(FieldType.BOOLEAN.value, "BOOLEAN")
+        self.assertEqual(FieldType.DATE.value, "DATE")
+        self.assertEqual(FieldType.TIMESTAMP.value, "TIMESTAMP")
+        self.assertEqual(FieldType.VECTOR.value, "VECTOR")
+        self.assertEqual(FieldType.BLOB.value, "BLOB")
+        self.assertEqual(FieldType.JSON.value, "JSON")
 
     def test_predicate_usage_values(self) -> None:
-        assert PredicateUsage.REQUIRED.value == "REQUIRED"
-        assert PredicateUsage.OPTIONAL.value == "OPTIONAL"
+        self.assertEqual(PredicateUsage.REQUIRED.value, "REQUIRED")
+        self.assertEqual(PredicateUsage.OPTIONAL.value, "OPTIONAL")
 
     def test_validation_issue_code_values(self) -> None:
-        assert ValidationIssueCode.MISSING_REQUIRED_PREDICATE.value == "MISSING_REQUIRED_PREDICATE"
-        assert ValidationIssueCode.INVALID_FORMAT.value == "INVALID_FORMAT"
-        assert ValidationIssueCode.FIELD_NOT_PERMITTED.value == "FIELD_NOT_PERMITTED"
-        assert ValidationIssueCode.FIELD_NOT_FOUND.value == "FIELD_NOT_FOUND"
-        assert ValidationIssueCode.INVALID_OPERATOR.value == "INVALID_OPERATOR"
-        assert ValidationIssueCode.INVALID_VALUE.value == "INVALID_VALUE"
-        assert ValidationIssueCode.CARDINALITY_EXCEEDED.value == "CARDINALITY_EXCEEDED"
+        self.assertEqual(
+            ValidationIssueCode.MISSING_REQUIRED_PREDICATE.value, "MISSING_REQUIRED_PREDICATE"
+        )
+        self.assertEqual(ValidationIssueCode.INVALID_FORMAT.value, "INVALID_FORMAT")
+        self.assertEqual(ValidationIssueCode.FIELD_NOT_PERMITTED.value, "FIELD_NOT_PERMITTED")
+        self.assertEqual(ValidationIssueCode.FIELD_NOT_FOUND.value, "FIELD_NOT_FOUND")
+        self.assertEqual(ValidationIssueCode.INVALID_OPERATOR.value, "INVALID_OPERATOR")
+        self.assertEqual(ValidationIssueCode.INVALID_VALUE.value, "INVALID_VALUE")
+        self.assertEqual(ValidationIssueCode.CARDINALITY_EXCEEDED.value, "CARDINALITY_EXCEEDED")
 
 
-class TestJSONRPCTypes:
+class TestJSONRPCTypes(unittest.TestCase):
     """Tests for JSON-RPC types."""
 
     def test_jsonrpc_error(self) -> None:
         error = JSONRPCError(code=-32600, message="Invalid request")
-        assert error.code == -32600
-        assert error.message == "Invalid request"
-        assert error.data is None
+        self.assertEqual(error.code, -32600)
+        self.assertEqual(error.message, "Invalid request")
+        self.assertIsNone(error.data)
 
     def test_jsonrpc_error_with_data(self) -> None:
         error = JSONRPCError(code=-32602, message="Invalid params", data={"field": "missing"})
-        assert error.code == -32602
-        assert error.data == {"field": "missing"}
+        self.assertEqual(error.code, -32602)
+        self.assertEqual(error.data, {"field": "missing"})
 
     def test_jsonrpc_request(self) -> None:
         request = JSONRPCRequest(id=1, method="adp.ping")
-        assert request.jsonrpc == "2.0"
-        assert request.id == 1
-        assert request.method == "adp.ping"
-        assert request.params is None
+        self.assertEqual(request.jsonrpc, "2.0")
+        self.assertEqual(request.id, 1)
+        self.assertEqual(request.method, "adp.ping")
+        self.assertIsNone(request.params)
 
     def test_jsonrpc_request_with_params(self) -> None:
         request = JSONRPCRequest(id="req-123", method="adp.discover", params={"cursor": "abc"})
-        assert request.id == "req-123"
-        assert request.params == {"cursor": "abc"}
+        self.assertEqual(request.id, "req-123")
+        self.assertEqual(request.params, {"cursor": "abc"})
 
     def test_jsonrpc_result_response(self) -> None:
         response = JSONRPCResultResponse(id=1, result={"valid": True})
-        assert response.jsonrpc == "2.0"
-        assert response.id == 1
-        assert response.result == {"valid": True}
+        self.assertEqual(response.jsonrpc, "2.0")
+        self.assertEqual(response.id, 1)
+        self.assertEqual(response.result, {"valid": True})
 
     def test_jsonrpc_error_response(self) -> None:
         error = JSONRPCError(code=-32600, message="Invalid request")
         response = JSONRPCErrorResponse(error=error)
-        assert response.jsonrpc == "2.0"
-        assert response.id is None
-        assert response.error.code == -32600
+        self.assertEqual(response.jsonrpc, "2.0")
+        self.assertIsNone(response.id)
+        self.assertEqual(response.error.code, -32600)
 
     def test_request_params_with_meta(self) -> None:
         params = RequestParams.model_validate({"_meta": {"progressToken": "token-123"}})
-        assert params.meta_ == {"progressToken": "token-123"}
+        self.assertEqual(params.meta_, {"progressToken": "token-123"})
 
     def test_result_extra_fields(self) -> None:
         result = Result.model_validate({"custom_field": "value"})
-        assert result.custom_field == "value"  # type: ignore[attr-defined]
+        self.assertEqual(result.custom_field, "value")  # type: ignore[attr-defined]
 
 
-class TestPredicateTypes:
+class TestPredicateTypes(unittest.TestCase):
     """Tests for predicate types."""
 
     def test_similar_value(self) -> None:
         similar = SimilarValue(text="hello world", top=10, threshold=0.8)
-        assert similar.text == "hello world"
-        assert similar.top == 10
-        assert similar.threshold == 0.8
+        self.assertEqual(similar.text, "hello world")
+        self.assertEqual(similar.top, 10)
+        self.assertEqual(similar.threshold, 0.8)
 
     def test_similar_value_with_distance_function(self) -> None:
         similar = SimilarValue.model_validate({"text": "query", "distanceFunction": "COSINE"})
-        assert similar.distance_function == "COSINE"
+        self.assertEqual(similar.distance_function, "COSINE")
 
     def test_predicate(self) -> None:
         pred = Predicate.model_validate({"fieldId": "name", "op": "EQ", "value": "John"})
-        assert pred.field_id == "name"
-        assert pred.op == PredicateOperator.EQ
-        assert pred.value == "John"
+        self.assertEqual(pred.field_id, "name")
+        self.assertEqual(pred.op, PredicateOperator.EQ)
+        self.assertEqual(pred.value, "John")
 
     def test_predicate_with_list_value(self) -> None:
         pred = Predicate.model_validate({"fieldId": "status", "op": "IN", "value": ["A", "B", "C"]})
-        assert pred.op == PredicateOperator.IN
-        assert pred.value == ["A", "B", "C"]
+        self.assertEqual(pred.op, PredicateOperator.IN)
+        self.assertEqual(pred.value, ["A", "B", "C"])
 
     def test_identity_predicate(self) -> None:
         pred = IdentityPredicate.model_validate({"fieldId": "id", "op": "EQ", "value": 123})
-        assert pred.field_id == "id"
-        assert pred.op == "EQ"
-        assert pred.value == 123
+        self.assertEqual(pred.field_id, "id")
+        self.assertEqual(pred.op, "EQ")
+        self.assertEqual(pred.value, 123)
 
     def test_identity_predicate_requires_eq(self) -> None:
-        with pytest.raises(ValidationError):
+        with self.assertRaises(ValidationError):
             IdentityPredicate.model_validate({"fieldId": "id", "op": "GT", "value": 123})
 
     def test_predicate_group(self) -> None:
@@ -243,8 +246,8 @@ class TestPredicateTypes:
                 ],
             }
         )
-        assert group.op == LogicOperator.AND
-        assert len(group.predicates) == 2
+        self.assertEqual(group.op, LogicOperator.AND)
+        self.assertEqual(len(group.predicates), 2)
 
     def test_nested_predicate_group(self) -> None:
         group = PredicateGroup.model_validate(
@@ -262,26 +265,26 @@ class TestPredicateTypes:
                 ],
             }
         )
-        assert group.op == LogicOperator.OR
-        assert len(group.predicates) == 2
-        assert isinstance(group.predicates[0], PredicateGroup)
+        self.assertEqual(group.op, LogicOperator.OR)
+        self.assertEqual(len(group.predicates), 2)
+        self.assertIsInstance(group.predicates[0], PredicateGroup)
 
 
-class TestInitializeTypes:
+class TestInitializeTypes(unittest.TestCase):
     """Tests for initialize types."""
 
     def test_implementation(self) -> None:
         impl = Implementation(name="ADP-Hypervisor", version="0.1.0")
-        assert impl.name == "ADP-Hypervisor"
-        assert impl.version == "0.1.0"
+        self.assertEqual(impl.name, "ADP-Hypervisor")
+        self.assertEqual(impl.version, "0.1.0")
 
     def test_client_capabilities(self) -> None:
         caps = ClientCapabilities()
-        assert caps.experimental is None
+        self.assertIsNone(caps.experimental)
 
     def test_client_capabilities_with_experimental(self) -> None:
         caps = ClientCapabilities(experimental={"feature1": {"enabled": True}})
-        assert caps.experimental == {"feature1": {"enabled": True}}
+        self.assertEqual(caps.experimental, {"feature1": {"enabled": True}})
 
     def test_server_capabilities(self) -> None:
         caps = ServerCapabilities.model_validate(
@@ -289,7 +292,7 @@ class TestInitializeTypes:
                 "supportedIntentClasses": ["QUERY", "LOOKUP"],
             }
         )
-        assert caps.supported_intent_classes == [IntentClass.QUERY, IntentClass.LOOKUP]
+        self.assertEqual(caps.supported_intent_classes, [IntentClass.QUERY, IntentClass.LOOKUP])
 
     def test_initialize_request_params(self) -> None:
         params = InitializeRequestParams.model_validate(
@@ -299,8 +302,8 @@ class TestInitializeTypes:
                 "clientInfo": {"name": "TestClient", "version": "1.0.0"},
             }
         )
-        assert params.protocol_version == "2026-01-20"
-        assert params.client_info.name == "TestClient"
+        self.assertEqual(params.protocol_version, "2026-01-20")
+        self.assertEqual(params.client_info.name, "TestClient")
 
     def test_initialize_request(self) -> None:
         request = InitializeRequest.model_validate(
@@ -315,8 +318,8 @@ class TestInitializeTypes:
                 },
             }
         )
-        assert request.method == "adp.initialize"
-        assert request.params.protocol_version == "2026-01-20"
+        self.assertEqual(request.method, "adp.initialize")
+        self.assertEqual(request.params.protocol_version, "2026-01-20")
 
     def test_initialize_result(self) -> None:
         result = InitializeResult.model_validate(
@@ -327,33 +330,33 @@ class TestInitializeTypes:
                 "instructions": "Use discover to find resources",
             }
         )
-        assert result.protocol_version == "2026-01-20"
-        assert result.server_info.name == "ADP-Hypervisor"
-        assert result.instructions == "Use discover to find resources"
+        self.assertEqual(result.protocol_version, "2026-01-20")
+        self.assertEqual(result.server_info.name, "ADP-Hypervisor")
+        self.assertEqual(result.instructions, "Use discover to find resources")
 
 
-class TestPingTypes:
+class TestPingTypes(unittest.TestCase):
     """Tests for ping types."""
 
     def test_ping_request(self) -> None:
         request = PingRequest(id=1)
-        assert request.method == "adp.ping"
-        assert request.params is None
+        self.assertEqual(request.method, "adp.ping")
+        self.assertIsNone(request.params)
 
 
-class TestPaginationTypes:
+class TestPaginationTypes(unittest.TestCase):
     """Tests for pagination types."""
 
     def test_paginated_request_params(self) -> None:
         params = PaginatedRequestParams(cursor="abc123")
-        assert params.cursor == "abc123"
+        self.assertEqual(params.cursor, "abc123")
 
     def test_paginated_result(self) -> None:
         result = PaginatedResult.model_validate({"nextCursor": "next-page"})
-        assert result.next_cursor == "next-page"
+        self.assertEqual(result.next_cursor, "next-page")
 
 
-class TestDiscoverTypes:
+class TestDiscoverTypes(unittest.TestCase):
     """Tests for discover types."""
 
     def test_discover_filter(self) -> None:
@@ -364,9 +367,9 @@ class TestDiscoverTypes:
                 "keyword": "finance",
             }
         )
-        assert filter_.domain_prefix == "com.acme"
-        assert filter_.intent_class == IntentClass.QUERY
-        assert filter_.keyword == "finance"
+        self.assertEqual(filter_.domain_prefix, "com.acme")
+        self.assertEqual(filter_.intent_class, IntentClass.QUERY)
+        self.assertEqual(filter_.keyword, "finance")
 
     def test_discover_request_params(self) -> None:
         params = DiscoverRequestParams.model_validate(
@@ -375,9 +378,10 @@ class TestDiscoverTypes:
                 "cursor": "page2",
             }
         )
-        assert params.filter is not None
-        assert params.filter.domain_prefix == "com.acme"
-        assert params.cursor == "page2"
+        self.assertIsNotNone(params.filter)
+        self.assertIsNotNone(params.filter)
+        self.assertEqual(params.filter.domain_prefix, "com.acme")
+        self.assertEqual(params.cursor, "page2")
 
     def test_resource(self) -> None:
         resource = Resource.model_validate(
@@ -389,10 +393,10 @@ class TestDiscoverTypes:
                 "tags": ["PII-FREE", "FINANCE"],
             }
         )
-        assert resource.resource_id == "com.acme.finance:bank_failures"
-        assert resource.version == 1
-        assert resource.intent_classes == [IntentClass.QUERY, IntentClass.LOOKUP]
-        assert resource.tags == ["PII-FREE", "FINANCE"]
+        self.assertEqual(resource.resource_id, "com.acme.finance:bank_failures")
+        self.assertEqual(resource.version, 1)
+        self.assertEqual(resource.intent_classes, [IntentClass.QUERY, IntentClass.LOOKUP])
+        self.assertEqual(resource.tags, ["PII-FREE", "FINANCE"])
 
     def test_discover_result(self) -> None:
         result = DiscoverResult.model_validate(
@@ -404,11 +408,11 @@ class TestDiscoverTypes:
                 "nextCursor": "page2",
             }
         )
-        assert len(result.resources) == 2
-        assert result.next_cursor == "page2"
+        self.assertEqual(len(result.resources), 2)
+        self.assertEqual(result.next_cursor, "page2")
 
 
-class TestDescribeTypes:
+class TestDescribeTypes(unittest.TestCase):
     """Tests for describe types."""
 
     def test_field_metadata(self) -> None:
@@ -420,10 +424,10 @@ class TestDescribeTypes:
                 "hint": "Use ISO format",
             }
         )
-        assert metadata.cardinality == 1000
-        assert metadata.format == "YYYY-MM-DD"
-        assert metadata.whitelist_only is True
-        assert metadata.hint == "Use ISO format"
+        self.assertEqual(metadata.cardinality, 1000)
+        self.assertEqual(metadata.format, "YYYY-MM-DD")
+        self.assertTrue(metadata.whitelist_only)
+        self.assertEqual(metadata.hint, "Use ISO format")
 
     def test_field(self) -> None:
         field = Field.model_validate(
@@ -436,11 +440,11 @@ class TestDescribeTypes:
                 "isSearchable": True,
             }
         )
-        assert field.field_id == "name"
-        assert field.type == FieldType.STRING
-        assert field.samples == ["John", "Jane"]
-        assert field.is_masked is False
-        assert field.is_searchable is True
+        self.assertEqual(field.field_id, "name")
+        self.assertEqual(field.type, FieldType.STRING)
+        self.assertEqual(field.samples, ["John", "Jane"])
+        self.assertFalse(field.is_masked)
+        self.assertTrue(field.is_searchable)
 
     def test_predicate_capability(self) -> None:
         cap = PredicateCapability.model_validate(
@@ -450,13 +454,13 @@ class TestDescribeTypes:
                 "operators": ["EQ", "IN"],
             }
         )
-        assert cap.field_id == "status"
-        assert cap.usage == PredicateUsage.REQUIRED
-        assert cap.operators == [PredicateOperator.EQ, PredicateOperator.IN]
+        self.assertEqual(cap.field_id, "status")
+        self.assertEqual(cap.usage, PredicateUsage.REQUIRED)
+        self.assertEqual(cap.operators, [PredicateOperator.EQ, PredicateOperator.IN])
 
     def test_projection_capability(self) -> None:
         cap = ProjectionCapability.model_validate({"fieldId": "name"})
-        assert cap.field_id == "name"
+        self.assertEqual(cap.field_id, "name")
 
     def test_mutable_capability(self) -> None:
         cap = MutableCapability.model_validate(
@@ -465,8 +469,8 @@ class TestDescribeTypes:
                 "constraints": {"maxLength": 100},
             }
         )
-        assert cap.field_id == "status"
-        assert cap.constraints == {"maxLength": 100}
+        self.assertEqual(cap.field_id, "status")
+        self.assertEqual(cap.constraints, {"maxLength": 100})
 
     def test_capabilities(self) -> None:
         caps = Capabilities.model_validate(
@@ -475,8 +479,8 @@ class TestDescribeTypes:
                 "projections": [{"fieldId": "name"}],
             }
         )
-        assert len(caps.predicates or []) == 1
-        assert len(caps.projections or []) == 1
+        self.assertEqual(len(caps.predicates or []), 1)
+        self.assertEqual(len(caps.projections or []), 1)
 
     def test_usage_contract(self) -> None:
         contract = UsageContract.model_validate(
@@ -487,8 +491,8 @@ class TestDescribeTypes:
                 },
             }
         )
-        assert len(contract.fields) == 1
-        assert contract.capabilities.predicates is not None
+        self.assertEqual(len(contract.fields), 1)
+        self.assertIsNotNone(contract.capabilities.predicates)
 
     def test_describe_request_params(self) -> None:
         params = DescribeRequestParams.model_validate(
@@ -498,9 +502,9 @@ class TestDescribeTypes:
                 "version": 2,
             }
         )
-        assert params.resource_id == "com.acme:users"
-        assert params.intent_class == IntentClass.QUERY
-        assert params.version == 2
+        self.assertEqual(params.resource_id, "com.acme:users")
+        self.assertEqual(params.intent_class, IntentClass.QUERY)
+        self.assertEqual(params.version, 2)
 
     def test_describe_result(self) -> None:
         result = DescribeResult.model_validate(
@@ -514,12 +518,12 @@ class TestDescribeTypes:
                 },
             }
         )
-        assert result.resource_id == "com.acme:users"
-        assert result.version == 1
-        assert result.intent_class == IntentClass.QUERY
+        self.assertEqual(result.resource_id, "com.acme:users")
+        self.assertEqual(result.version, 1)
+        self.assertEqual(result.intent_class, IntentClass.QUERY)
 
 
-class TestIntentTypes:
+class TestIntentTypes(unittest.TestCase):
     """Tests for intent types."""
 
     def test_lookup_intent(self) -> None:
@@ -530,14 +534,14 @@ class TestIntentTypes:
                 "projections": ["name", "email"],
             }
         )
-        assert intent.intent_class == "LOOKUP"
-        assert intent.key.field_id == "id"
-        assert intent.projections == ["name", "email"]
+        self.assertEqual(intent.intent_class, "LOOKUP")
+        self.assertEqual(intent.key.field_id, "id")
+        self.assertEqual(intent.projections, ["name", "email"])
 
     def test_sort_order(self) -> None:
         order = SortOrder.model_validate({"direction": "ASC", "fieldId": "name"})
-        assert order.direction == "ASC"
-        assert order.field_id == "name"
+        self.assertEqual(order.direction, "ASC")
+        self.assertEqual(order.field_id, "name")
 
     def test_query_intent(self) -> None:
         intent = QueryIntent.model_validate(
@@ -552,9 +556,9 @@ class TestIntentTypes:
                 "limit": 100,
             }
         )
-        assert intent.intent_class == "QUERY"
-        assert intent.predicates.op == LogicOperator.AND
-        assert intent.limit == 100
+        self.assertEqual(intent.intent_class, "QUERY")
+        self.assertEqual(intent.predicates.op, LogicOperator.AND)
+        self.assertEqual(intent.limit, 100)
 
     def test_ingest_intent(self) -> None:
         intent = IngestIntent.model_validate(
@@ -566,8 +570,8 @@ class TestIntentTypes:
                 ],
             }
         )
-        assert intent.intent_class == "INGEST"
-        assert len(intent.payload) == 2
+        self.assertEqual(intent.intent_class, "INGEST")
+        self.assertEqual(len(intent.payload), 2)
 
     def test_revise_intent(self) -> None:
         intent = ReviseIntent.model_validate(
@@ -580,11 +584,11 @@ class TestIntentTypes:
                 "payload": {"status": "inactive"},
             }
         )
-        assert intent.intent_class == "REVISE"
-        assert intent.payload == {"status": "inactive"}
+        self.assertEqual(intent.intent_class, "REVISE")
+        self.assertEqual(intent.payload, {"status": "inactive"})
 
 
-class TestValidateTypes:
+class TestValidateTypes(unittest.TestCase):
     """Tests for validate types."""
 
     def test_validation_issue(self) -> None:
@@ -597,9 +601,9 @@ class TestValidateTypes:
                 "correctionHint": "Check available fields with describe",
             }
         )
-        assert issue.code == ValidationIssueCode.FIELD_NOT_FOUND
-        assert issue.severity == IssueSeverity.BLOCKING
-        assert issue.correction_hint == "Check available fields with describe"
+        self.assertEqual(issue.code, ValidationIssueCode.FIELD_NOT_FOUND)
+        self.assertEqual(issue.severity, IssueSeverity.BLOCKING)
+        self.assertEqual(issue.correction_hint, "Check available fields with describe")
 
     def test_validate_request_params(self) -> None:
         params = ValidateRequestParams.model_validate(
@@ -611,13 +615,13 @@ class TestValidateTypes:
                 },
             }
         )
-        assert params.resource_id == "com.acme:users"
-        assert isinstance(params.intent, LookupIntent)
+        self.assertEqual(params.resource_id, "com.acme:users")
+        self.assertIsInstance(params.intent, LookupIntent)
 
     def test_validate_result_valid(self) -> None:
         result = ValidateResult.model_validate({"valid": True})
-        assert result.valid is True
-        assert result.issues is None
+        self.assertTrue(result.valid)
+        self.assertIsNone(result.issues)
 
     def test_validate_result_invalid(self) -> None:
         result = ValidateResult.model_validate(
@@ -633,11 +637,11 @@ class TestValidateTypes:
                 ],
             }
         )
-        assert result.valid is False
-        assert len(result.issues or []) == 1
+        self.assertFalse(result.valid)
+        self.assertEqual(len(result.issues or []), 1)
 
 
-class TestExecuteTypes:
+class TestExecuteTypes(unittest.TestCase):
     """Tests for execute types."""
 
     def test_execute_request_params(self) -> None:
@@ -654,8 +658,8 @@ class TestExecuteTypes:
                 "cursor": "page2",
             }
         )
-        assert params.resource_id == "com.acme:users"
-        assert isinstance(params.intent, QueryIntent)
+        self.assertEqual(params.resource_id, "com.acme:users")
+        self.assertIsInstance(params.intent, QueryIntent)
 
     def test_execution_metadata(self) -> None:
         metadata = ExecutionMetadata.model_validate(
@@ -665,9 +669,9 @@ class TestExecuteTypes:
                 "consistency": "STRONG",
             }
         )
-        assert metadata.duration_ms == 150
-        assert metadata.source_system == "PostgreSQL"
-        assert metadata.consistency == ConsistencyLevel.STRONG
+        self.assertEqual(metadata.duration_ms, 150)
+        self.assertEqual(metadata.source_system, "PostgreSQL")
+        self.assertEqual(metadata.consistency, ConsistencyLevel.STRONG)
 
     def test_execute_result(self) -> None:
         result = ExecuteResult.model_validate(
@@ -677,115 +681,116 @@ class TestExecuteTypes:
                 "nextCursor": "page2",
             }
         )
-        assert len(result.results) == 2
-        assert result.execution_metadata is not None
-        assert result.execution_metadata.duration_ms == 100
-        assert result.next_cursor == "page2"
+        self.assertEqual(len(result.results), 2)
+        self.assertIsNotNone(result.execution_metadata)
+        self.assertIsNotNone(result.execution_metadata)
+        self.assertEqual(result.execution_metadata.duration_ms, 100)
+        self.assertEqual(result.next_cursor, "page2")
 
 
-class TestErrorCodes:
+class TestErrorCodes(unittest.TestCase):
     """Tests for error code constants."""
 
     def test_standard_error_codes(self) -> None:
-        assert PARSE_ERROR == -32700
-        assert INVALID_REQUEST == -32600
-        assert METHOD_NOT_FOUND == -32601
-        assert INVALID_PARAMS == -32602
-        assert INTERNAL_ERROR == -32603
+        self.assertEqual(PARSE_ERROR, -32700)
+        self.assertEqual(INVALID_REQUEST, -32600)
+        self.assertEqual(METHOD_NOT_FOUND, -32601)
+        self.assertEqual(INVALID_PARAMS, -32602)
+        self.assertEqual(INTERNAL_ERROR, -32603)
 
     def test_adp_error_codes(self) -> None:
-        assert RESOURCE_NOT_FOUND == -32001
-        assert VALIDATION_FAILED == -32002
-        assert UNAUTHORIZED == -32003
-        assert EXECUTION_FAILED == -32004
+        self.assertEqual(RESOURCE_NOT_FOUND, -32001)
+        self.assertEqual(VALIDATION_FAILED, -32002)
+        self.assertEqual(UNAUTHORIZED, -32003)
+        self.assertEqual(EXECUTION_FAILED, -32004)
 
 
-class TestADPErrors:
+class TestADPErrors(unittest.TestCase):
     """Tests for ADP error classes."""
 
     def test_adp_error_base(self) -> None:
         error = ADPError("Something went wrong")
-        assert str(error) == "Something went wrong"
-        assert error.code == INTERNAL_ERROR
+        self.assertEqual(str(error), "Something went wrong")
+        self.assertEqual(error.code, INTERNAL_ERROR)
 
     def test_adp_error_to_dict(self) -> None:
         error = ADPError("Error message", data={"detail": "info"})
         error_dict = error.to_dict()
-        assert error_dict["code"] == INTERNAL_ERROR
-        assert error_dict["message"] == "Error message"
-        assert error_dict["data"] == {"detail": "info"}
+        self.assertEqual(error_dict["code"], INTERNAL_ERROR)
+        self.assertEqual(error_dict["message"], "Error message")
+        self.assertEqual(error_dict["data"], {"detail": "info"})
 
     def test_parse_error(self) -> None:
         error = ParseError()
-        assert error.code == PARSE_ERROR
-        assert str(error) == "Parse error"
+        self.assertEqual(error.code, PARSE_ERROR)
+        self.assertEqual(str(error), "Parse error")
 
     def test_parse_error_custom_message(self) -> None:
         error = ParseError("Invalid JSON at position 5")
-        assert str(error) == "Invalid JSON at position 5"
+        self.assertEqual(str(error), "Invalid JSON at position 5")
 
     def test_invalid_request_error(self) -> None:
         error = InvalidRequestError()
-        assert error.code == INVALID_REQUEST
+        self.assertEqual(error.code, INVALID_REQUEST)
 
     def test_method_not_found_error(self) -> None:
         error = MethodNotFoundError("Method 'unknown' not found")
-        assert error.code == METHOD_NOT_FOUND
-        assert str(error) == "Method 'unknown' not found"
+        self.assertEqual(error.code, METHOD_NOT_FOUND)
+        self.assertEqual(str(error), "Method 'unknown' not found")
 
     def test_invalid_params_error(self) -> None:
         error = InvalidParamsError(data={"missing": ["resourceId"]})
-        assert error.code == INVALID_PARAMS
-        assert error.data == {"missing": ["resourceId"]}
+        self.assertEqual(error.code, INVALID_PARAMS)
+        self.assertEqual(error.data, {"missing": ["resourceId"]})
 
     def test_internal_error(self) -> None:
         error = InternalError()
-        assert error.code == INTERNAL_ERROR
+        self.assertEqual(error.code, INTERNAL_ERROR)
 
     def test_resource_not_found_error(self) -> None:
         error = ResourceNotFoundError("Resource 'com.acme:unknown' not found")
-        assert error.code == RESOURCE_NOT_FOUND
+        self.assertEqual(error.code, RESOURCE_NOT_FOUND)
 
     def test_validation_failed_error(self) -> None:
         error = ValidationFailedError(data={"issues": [{"code": "FIELD_NOT_FOUND"}]})
-        assert error.code == VALIDATION_FAILED
+        self.assertEqual(error.code, VALIDATION_FAILED)
 
     def test_unauthorized_error(self) -> None:
         error = UnauthorizedError()
-        assert error.code == UNAUTHORIZED
+        self.assertEqual(error.code, UNAUTHORIZED)
 
     def test_execution_failed_error(self) -> None:
         error = ExecutionFailedError("Query timeout")
-        assert error.code == EXECUTION_FAILED
-        assert str(error) == "Query timeout"
+        self.assertEqual(error.code, EXECUTION_FAILED)
+        self.assertEqual(str(error), "Query timeout")
 
 
-class TestErrorFromCode:
+class TestErrorFromCode(unittest.TestCase):
     """Tests for error_from_code function."""
 
     def test_known_error_codes(self) -> None:
-        assert isinstance(error_from_code(PARSE_ERROR), ParseError)
-        assert isinstance(error_from_code(INVALID_REQUEST), InvalidRequestError)
-        assert isinstance(error_from_code(METHOD_NOT_FOUND), MethodNotFoundError)
-        assert isinstance(error_from_code(INVALID_PARAMS), InvalidParamsError)
-        assert isinstance(error_from_code(INTERNAL_ERROR), InternalError)
-        assert isinstance(error_from_code(RESOURCE_NOT_FOUND), ResourceNotFoundError)
-        assert isinstance(error_from_code(VALIDATION_FAILED), ValidationFailedError)
-        assert isinstance(error_from_code(UNAUTHORIZED), UnauthorizedError)
-        assert isinstance(error_from_code(EXECUTION_FAILED), ExecutionFailedError)
+        self.assertIsInstance(error_from_code(PARSE_ERROR), ParseError)
+        self.assertIsInstance(error_from_code(INVALID_REQUEST), InvalidRequestError)
+        self.assertIsInstance(error_from_code(METHOD_NOT_FOUND), MethodNotFoundError)
+        self.assertIsInstance(error_from_code(INVALID_PARAMS), InvalidParamsError)
+        self.assertIsInstance(error_from_code(INTERNAL_ERROR), InternalError)
+        self.assertIsInstance(error_from_code(RESOURCE_NOT_FOUND), ResourceNotFoundError)
+        self.assertIsInstance(error_from_code(VALIDATION_FAILED), ValidationFailedError)
+        self.assertIsInstance(error_from_code(UNAUTHORIZED), UnauthorizedError)
+        self.assertIsInstance(error_from_code(EXECUTION_FAILED), ExecutionFailedError)
 
     def test_unknown_error_code(self) -> None:
         error = error_from_code(-32099, "Custom error")
-        assert isinstance(error, ADPError)
-        assert error.code == -32099
-        assert str(error) == "Custom error"
+        self.assertIsInstance(error, ADPError)
+        self.assertEqual(error.code, -32099)
+        self.assertEqual(str(error), "Custom error")
 
     def test_error_from_code_with_data(self) -> None:
         error = error_from_code(INVALID_PARAMS, "Missing field", data={"field": "name"})
-        assert error.data == {"field": "name"}
+        self.assertEqual(error.data, {"field": "name"})
 
 
-class TestModelSerialization:
+class TestModelSerialization(unittest.TestCase):
     """Tests for model serialization (JSON output)."""
 
     def test_initialize_result_serialization(self) -> None:
@@ -797,15 +802,15 @@ class TestModelSerialization:
             }
         )
         data = result.model_dump(by_alias=True, exclude_none=True)
-        assert data["protocolVersion"] == "2026-01-20"
-        assert data["serverInfo"]["name"] == "ADP-Hypervisor"
-        assert "supportedIntentClasses" in data["capabilities"]
+        self.assertEqual(data["protocolVersion"], "2026-01-20")
+        self.assertEqual(data["serverInfo"]["name"], "ADP-Hypervisor")
+        self.assertIn("supportedIntentClasses", data["capabilities"])
 
     def test_predicate_serialization(self) -> None:
         pred = Predicate.model_validate({"fieldId": "name", "op": "EQ", "value": "John"})
         data = pred.model_dump(by_alias=True)
-        assert data["fieldId"] == "name"
-        assert data["op"] == "EQ"
+        self.assertEqual(data["fieldId"], "name")
+        self.assertEqual(data["op"], "EQ")
 
     def test_discover_result_serialization(self) -> None:
         result = DiscoverResult.model_validate(
@@ -817,5 +822,5 @@ class TestModelSerialization:
             }
         )
         data = result.model_dump(by_alias=True, exclude_none=True)
-        assert data["resources"][0]["resourceId"] == "com.acme:users"
-        assert data["nextCursor"] == "page2"
+        self.assertEqual(data["resources"][0]["resourceId"], "com.acme:users")
+        self.assertEqual(data["nextCursor"], "page2")

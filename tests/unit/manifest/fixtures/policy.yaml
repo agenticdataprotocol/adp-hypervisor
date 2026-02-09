@@ -1,0 +1,29 @@
+# Test fixture: Policy Manifest
+version: "1.0.0"
+
+policies:
+  - resourceId: "com.acme.finance:bank_failures"
+    rules:
+      - type: "MANDATORY_FILTER"
+        fieldId: "closing_date"
+        op: "GT"
+        value: "2020-01-01"
+        condition: "agent_tier == 'PRODUCTION'"
+
+      - type: "OPERATIONAL"
+        enforceLimit: 100
+        defaultOrderBy:
+          fieldId: "closing_date"
+          direction: "DESC"
+
+  - resourceId: "com.acme.finance:failure_vectors"
+    rules:
+      - type: "OPERATIONAL"
+        enforceLimit: 50
+
+  # Wildcard policy
+  - resourceId: "com.acme.finance:*"
+    rules:
+      - type: "OPERATIONAL"
+        enforceLimit: 1000
+        condition: "agent_tier == 'PRODUCTION'"

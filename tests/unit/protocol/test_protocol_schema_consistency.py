@@ -8,10 +8,10 @@ Schema is the single source of truth (schema/adp-protocol-{version}.json). These
 """
 
 import json
+import unittest
 from enum import StrEnum
 from pathlib import Path
 
-import pytest
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel
 from pydantic.alias_generators import to_camel
@@ -48,7 +48,7 @@ SCHEMA_TO_PYTHON_NAME = {"EmptyResult": "Result"}
 # -----------------------------------------------------------------------------
 
 
-class TestProtocolSchemaConsistency:
+class TestProtocolSchemaConsistency(unittest.TestCase):
     """
     Verify protocol types and the versioned ADP protocol schema are in sync.
 
@@ -56,14 +56,9 @@ class TestProtocolSchemaConsistency:
     helpers used only within this class.
     """
 
-    # -------------------------------------------------------------------------
-    # Fixture
-    # -------------------------------------------------------------------------
-
-    @pytest.fixture(scope="class")
-    def schema(self) -> dict:
-        """Load schema once per class."""
-        return self._load_schema()
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._schema = cls._load_schema()
 
     # -------------------------------------------------------------------------
     # Public: test methods
@@ -71,49 +66,59 @@ class TestProtocolSchemaConsistency:
 
     def test_schema_file_exists(self) -> None:
         """Schema file exists at expected path."""
-        assert SCHEMA_PATH.exists(), f"Schema not found at {SCHEMA_PATH}"
+        self.assertTrue(SCHEMA_PATH.exists(), f"Schema not found at {SCHEMA_PATH}")
 
-    def test_protocol_coverage_every_schema_def_has_python_type(self, schema: dict) -> None:
+    def test_protocol_coverage_every_schema_def_has_python_type(self) -> None:
         """
         For each schema $defs key (except excluded), protocol exposes a corresponding type.
         """
+        schema = self._schema
         missing = []
         for name in self._schema_def_names(schema, exclude=SCHEMA_DEFS_EXCLUDED):
             py_type = self._get_python_type(name)
             if py_type is None:
                 missing.append(name)
-        assert not missing, (
-            f"Schema types with no Python equivalent: {missing}. "
-            "Add corresponding types to adp_hypervisor.protocol or add to SCHEMA_DEFS_EXCLUDED."
+        self.assertFalse(
+            missing,
+            (
+                f"Schema types with no Python equivalent: {missing}. "
+                "Add corresponding types to adp_hypervisor.protocol or add to SCHEMA_DEFS_EXCLUDED."
+            ),
         )
 
-    def test_enum_consistency_schema_enum_matches_python_str_enum(self, schema: dict) -> None:
+    def test_enum_consistency_schema_enum_matches_python_str_enum(self) -> None:
         """
         For each schema definition that is a string enum, the Python StrEnum
         has the same set of values.
         """
+        schema = self._schema
         defs = self._get_schema_defs(schema)
         for name, defn in defs.items():
             if not self._is_enum_def(defn):
                 continue
             schema_values = set(defn["enum"])
             py_type = self._get_python_type(name)
-            assert (
-                py_type is not None
-            ), f"Schema enum {name} has no Python type (coverage should have failed)"
+            self.assertIsNotNone(
+                py_type, f"Schema enum {name} has no Python type (coverage should have failed)"
+            )
             if not isinstance(py_type, type) or not issubclass(py_type, StrEnum):
                 continue
             py_values = {m.value for m in py_type}
-            assert schema_values == py_values, (
-                f"Enum {name}: schema has {schema_values}, Python has {py_values}. "
-                f"Symdiff: {schema_values ^ py_values}"
+            self.assertEqual(
+                schema_values,
+                py_values,
+                (
+                    f"Enum {name}: schema has {schema_values}, Python has {py_values}. "
+                    f"Symdiff: {schema_values ^ py_values}"
+                ),
             )
 
-    def test_object_type_required_fields_and_properties_match_schema(self, schema: dict) -> None:
+    def test_object_type_required_fields_and_properties_match_schema(self) -> None:
         """
         For each schema object type with properties, the Python model has
         the same required fields (by protocol name) and at least the same properties.
         """
+        schema = self._schema
         defs = self._get_schema_defs(schema)
         for name, defn in defs.items():
             if not self._is_object_def(defn):
@@ -129,20 +134,27 @@ class TestProtocolSchemaConsistency:
             py_protocol_names = self._get_protocol_field_names(py_type)
 
             missing_props = schema_props - py_protocol_names
-            assert not missing_props, (
-                f"Object type {name}: schema properties {missing_props} missing in Python model. "
-                f"Protocol field names: {py_protocol_names}"
+            self.assertFalse(
+                missing_props,
+                (
+                    f"Object type {name}: schema properties {missing_props} missing in Python "
+                    f"model. Protocol field names: {py_protocol_names}"
+                ),
             )
 
             missing_required_as_props = schema_required - py_protocol_names
-            assert not missing_required_as_props, (
-                f"Object type {name}: schema required fields "
-                f"{missing_required_as_props} missing in Python model. "
-                f"Protocol field names: {py_protocol_names}"
+            self.assertFalse(
+                missing_required_as_props,
+                (
+                    f"Object type {name}: schema required fields "
+                    f"{missing_required_as_props} missing in Python model. "
+                    f"Protocol field names: {py_protocol_names}"
+                ),
             )
 
-    def test_roundtrip_initialize_request_valid_against_schema(self, schema: dict) -> None:
+    def test_roundtrip_initialize_request_valid_against_schema(self) -> None:
         """Serialized InitializeRequest (minimal valid instance) validates against schema."""
+        schema = self._schema
         params = InitializeRequestParams(
             capabilities=ClientCapabilities(),
             client_info=Implementation(name="test", version="0.1.0"),
@@ -154,8 +166,9 @@ class TestProtocolSchemaConsistency:
         ref_schema = self._schema_for_def(schema, "InitializeRequest")
         Draft202012Validator(ref_schema).validate(payload)
 
-    def test_roundtrip_describe_result_valid_against_schema(self, schema: dict) -> None:
+    def test_roundtrip_describe_result_valid_against_schema(self) -> None:
         """Serialized DescribeResult (minimal valid instance) validates against schema."""
+        schema = self._schema
         obj = DescribeResult(
             resource_id="domain:alias",
             version=1,
@@ -167,8 +180,9 @@ class TestProtocolSchemaConsistency:
         ref_schema = self._schema_for_def(schema, "DescribeResult")
         Draft202012Validator(ref_schema).validate(payload)
 
-    def test_roundtrip_execute_result_valid_against_schema(self, schema: dict) -> None:
+    def test_roundtrip_execute_result_valid_against_schema(self) -> None:
         """Serialized ExecuteResult (minimal valid instance) validates against schema."""
+        schema = self._schema
         obj = ExecuteResult(results=[])
         payload = obj.model_dump(by_alias=True, exclude_none=True)
 
@@ -179,12 +193,14 @@ class TestProtocolSchemaConsistency:
     # Private: helpers (internal to this test class)
     # -------------------------------------------------------------------------
 
-    def _load_schema(self) -> dict:
+    @staticmethod
+    def _load_schema() -> dict:
         """Load schema.json from project root."""
         with open(SCHEMA_PATH, encoding="utf-8") as f:
             return json.load(f)
 
-    def _get_schema_defs(self, schema: dict) -> dict:
+    @staticmethod
+    def _get_schema_defs(schema: dict) -> dict:
         """Return $defs from schema."""
         return schema.get("$defs", {})
 
@@ -230,15 +246,18 @@ class TestProtocolSchemaConsistency:
                     required.add(to_camel(name))
         return required
 
-    def _is_object_def(self, defn: dict) -> bool:
+    @staticmethod
+    def _is_object_def(defn: dict) -> bool:
         """True if schema definition is an object type with properties."""
         return defn.get("type") == "object" and "properties" in defn
 
-    def _is_enum_def(self, defn: dict) -> bool:
+    @staticmethod
+    def _is_enum_def(defn: dict) -> bool:
         """True if schema definition is a string enum."""
         return defn.get("type") == "string" and "enum" in defn
 
-    def _schema_for_def(self, schema: dict, type_name: str) -> dict:
+    @staticmethod
+    def _schema_for_def(schema: dict, type_name: str) -> dict:
         """Build a schema that validates against $defs[type_name] with $ref resolution."""
         return {
             "$defs": schema["$defs"],

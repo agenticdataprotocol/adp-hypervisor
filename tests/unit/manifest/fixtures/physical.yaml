@@ -1,0 +1,50 @@
+# Test fixture: Physical Manifest
+version: "1.0.0"
+
+backends:
+  - id: "finance_sql"
+    type: "RDBMS"
+    config:
+      type: "RDBMS"
+      uri: "postgresql://db.acme.com:5432/finance"
+      schema: "public"
+    credentials:
+      type: "env"
+      key: "DB_PASSWORD"
+
+  - id: "report_vectors"
+    type: "VECTOR"
+    config:
+      type: "VECTOR"
+      provider: "PINECONE"
+      indexName: "bank-summaries"
+      endpoint: "https://api.pinecone.io"
+    credentials:
+      type: "secret"
+      manager: "AWS_SECRETS_MANAGER"
+      key: "production/pinecone-api-key"
+
+  - id: "raw_storage"
+    type: "S3"
+    config:
+      type: "S3"
+      uri: "s3://acme-finance-datalake/"
+      region: "us-east-1"
+
+  - id: "analytics_nosql"
+    type: "NOSQL"
+    config:
+      type: "NOSQL"
+      uri: "mongodb://mongo.acme.com:27017/analytics"
+    credentials:
+      type: "env"
+      key: "MONGO_PASSWORD"
+
+  - id: "graph_db"
+    type: "GRAPH"
+    config:
+      type: "GRAPH"
+      uri: "neo4j://graph.acme.com:7687"
+    credentials:
+      type: "file"
+      key: "/etc/secrets/neo4j-credentials.json"

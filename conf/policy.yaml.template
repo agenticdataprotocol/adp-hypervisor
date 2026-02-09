@@ -1,0 +1,25 @@
+# Policy Manifest Template
+# Defines governance rules and constraints for resource access
+#
+# Copy this file as policy.yaml and customize for your environment.
+
+version: "1.0.0"
+
+# Bootstrap Mode (no enforcements):
+# policies: []
+
+# policies:
+#   - resourceId: "com.example:my_table"
+#     rules:
+#       # Operational constraint: limit results
+#       - type: "OPERATIONAL"
+#         enforceLimit: 100
+#         defaultOrderBy:
+#           fieldId: "id"
+#           direction: "ASC"
+#
+#       # Mandatory filter example (uncomment to enable):
+#       - type: "MANDATORY_FILTER"
+#         fieldId: "status"
+#         op: "EQ"
+#         value: "active"
