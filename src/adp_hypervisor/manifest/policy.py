@@ -25,7 +25,7 @@ class MandatoryFilterRule(ADPModel):
     """Mandatory filter rule that enforces required predicates."""
 
     type: Literal["MANDATORY_FILTER"] = PydanticField(
-        default="MANDATORY_FILTER", description="Type of policy rule"
+        ..., description="Type of policy rule"
     )
     field_id: str = PydanticField(..., description="Field identifier for the mandatory filter")
     op: PredicateOperator = PydanticField(..., description="Operator for the mandatory filter")
@@ -41,7 +41,7 @@ class OperationalRule(ADPModel):
     """Operational constraints for resource access."""
 
     type: Literal["OPERATIONAL"] = PydanticField(
-        default="OPERATIONAL", description="Type of policy rule"
+        ..., description="Type of policy rule"
     )
     enforce_limit: int | None = PydanticField(
         default=None, description="Maximum number of results to return"

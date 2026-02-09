@@ -1,5 +1,7 @@
 """Tests for Policy Manifest models."""
 
+import unittest
+
 from adp_hypervisor.manifest.policy import (
     MandatoryFilterRule,
     OperationalRule,
@@ -13,7 +15,7 @@ from adp_hypervisor.protocol.types import PredicateOperator
 # =============================================================================
 
 
-class TestMandatoryFilterRule:
+class TestMandatoryFilterRule(unittest.TestCase):
     def test_string_value(self) -> None:
         rule = MandatoryFilterRule.model_validate(
             {
@@ -23,14 +25,16 @@ class TestMandatoryFilterRule:
                 "value": "2020-01-01",
             }
         )
-        assert rule.field_id == "closing_date"
-        assert rule.op == PredicateOperator.GT
-        assert rule.value == "2020-01-01"
-        assert rule.condition is None
+        self.assertEqual(rule.field_id, "closing_date")
+        self.assertEqual(rule.op, PredicateOperator.GT)
+        self.assertEqual(rule.value, "2020-01-01")
+        self.assertIsNone(rule.condition)
 
     def test_numeric_value(self) -> None:
-        rule = MandatoryFilterRule(field_id="amount", op=PredicateOperator.GTE, value=100)
-        assert rule.value == 100
+        rule = MandatoryFilterRule(
+            type="MANDATORY_FILTER", field_id="amount", op=PredicateOperator.GTE, value=100
+        )
+        self.assertEqual(rule.value, 100)
 
     def test_list_value(self) -> None:
         rule = MandatoryFilterRule.model_validate(
@@ -41,7 +45,7 @@ class TestMandatoryFilterRule:
                 "value": ["active", "pending"],
             }
         )
-        assert rule.value == ["active", "pending"]
+        self.assertEqual(rule.value, ["active", "pending"])
 
     def test_with_condition(self) -> None:
         rule = MandatoryFilterRule.model_validate(
@@ -53,7 +57,7 @@ class TestMandatoryFilterRule:
                 "condition": "agent_tier == 'PRODUCTION'",
             }
         )
-        assert rule.condition == "agent_tier == 'PRODUCTION'"
+        self.assertEqual(rule.condition, "agent_tier == 'PRODUCTION'")
 
 
 # =============================================================================
@@ -61,11 +65,11 @@ class TestMandatoryFilterRule:
 # =============================================================================
 
 
-class TestOperationalRule:
+class TestOperationalRule(unittest.TestCase):
     def test_enforce_limit(self) -> None:
         rule = OperationalRule.model_validate({"type": "OPERATIONAL", "enforceLimit": 100})
-        assert rule.enforce_limit == 100
-        assert rule.default_order_by is None
+        self.assertEqual(rule.enforce_limit, 100)
+        self.assertIsNone(rule.default_order_by)
 
     def test_default_order_by(self) -> None:
         rule = OperationalRule.model_validate(
@@ -74,9 +78,10 @@ class TestOperationalRule:
                 "defaultOrderBy": {"fieldId": "created_at", "direction": "DESC"},
             }
         )
-        assert rule.default_order_by is not None
-        assert rule.default_order_by.field_id == "created_at"
-        assert rule.default_order_by.direction == "DESC"
+        self.assertIsNotNone(rule.default_order_by)
+        self.assertIsNotNone(rule.default_order_by)
+        self.assertEqual(rule.default_order_by.field_id, "created_at")
+        self.assertEqual(rule.default_order_by.direction, "DESC")
 
     def test_full_operational_rule(self) -> None:
         rule = OperationalRule.model_validate(
@@ -87,8 +92,8 @@ class TestOperationalRule:
                 "condition": "agent_tier == 'BASIC'",
             }
         )
-        assert rule.enforce_limit == 50
-        assert rule.condition == "agent_tier == 'BASIC'"
+        self.assertEqual(rule.enforce_limit, 50)
+        self.assertEqual(rule.condition, "agent_tier == 'BASIC'")
 
 
 # =============================================================================
@@ -96,7 +101,7 @@ class TestOperationalRule:
 # =============================================================================
 
 
-class TestResourcePolicy:
+class TestResourcePolicy(unittest.TestCase):
     def test_policy_with_rules(self) -> None:
         policy = ResourcePolicy.model_validate(
             {
@@ -112,15 +117,16 @@ class TestResourcePolicy:
                 ],
             }
         )
-        assert policy.resource_id == "com.acme:bank_failures"
-        assert policy.rules is not None
-        assert len(policy.rules) == 2
-        assert isinstance(policy.rules[0], MandatoryFilterRule)
-        assert isinstance(policy.rules[1], OperationalRule)
+        self.assertEqual(policy.resource_id, "com.acme:bank_failures")
+        self.assertIsNotNone(policy.rules)
+        self.assertIsNotNone(policy.rules)
+        self.assertEqual(len(policy.rules), 2)
+        self.assertIsInstance(policy.rules[0], MandatoryFilterRule)
+        self.assertIsInstance(policy.rules[1], OperationalRule)
 
     def test_policy_no_rules(self) -> None:
         policy = ResourcePolicy.model_validate({"resourceId": "com.acme:test", "rules": []})
-        assert policy.rules == []
+        self.assertEqual(policy.rules, [])
 
     def test_wildcard_resource_policy(self) -> None:
         policy = ResourcePolicy.model_validate(
@@ -129,7 +135,7 @@ class TestResourcePolicy:
                 "rules": [{"type": "OPERATIONAL", "enforceLimit": 50}],
             }
         )
-        assert policy.resource_id == "com.acme:*"
+        self.assertEqual(policy.resource_id, "com.acme:*")
 
 
 # =============================================================================
@@ -137,7 +143,7 @@ class TestResourcePolicy:
 # =============================================================================
 
 
-class TestPolicyManifest:
+class TestPolicyManifest(unittest.TestCase):
     def test_full_manifest(self) -> None:
         manifest = PolicyManifest.model_validate(
             {
@@ -157,15 +163,16 @@ class TestPolicyManifest:
                 ],
             }
         )
-        assert manifest.version == "1.0.0"
-        assert manifest.policies is not None
-        assert len(manifest.policies) == 1
+        self.assertEqual(manifest.version, "1.0.0")
+        self.assertIsNotNone(manifest.policies)
+        self.assertIsNotNone(manifest.policies)
+        self.assertEqual(len(manifest.policies), 1)
 
     def test_bootstrap_no_policies(self) -> None:
         """Bootstrap mode: no policies."""
         manifest = PolicyManifest.model_validate({"version": "1.0.0"})
-        assert manifest.policies is None
+        self.assertIsNone(manifest.policies)
 
     def test_empty_policies(self) -> None:
         manifest = PolicyManifest.model_validate({"version": "1.0.0", "policies": []})
-        assert manifest.policies == []
+        self.assertEqual(manifest.policies, [])

@@ -1,9 +1,9 @@
 """Tests for the JSON-RPC Dispatcher."""
 
 import json
+import unittest
 from typing import Any
 
-import pytest
 from pydantic import BaseModel
 
 from adp_hypervisor.protocol import (
@@ -51,7 +51,7 @@ class ErrorHandler(Handler):
         return EmptyResult()
 
 
-class TestDispatcherRegistration:
+class TestDispatcherRegistration(unittest.TestCase):
     """Tests for handler registration."""
 
     def test_register_handler(self) -> None:
@@ -60,7 +60,7 @@ class TestDispatcherRegistration:
 
         dispatcher.register_handler(handler)
 
-        assert "test.method" in dispatcher.get_registered_methods()
+        self.assertIn("test.method", dispatcher.get_registered_methods())
 
     def test_register_duplicate_handler_raises(self) -> None:
         dispatcher = Dispatcher()
@@ -69,7 +69,7 @@ class TestDispatcherRegistration:
 
         dispatcher.register_handler(handler1)
 
-        with pytest.raises(ValueError, match="already registered"):
+        with self.assertRaisesRegex(ValueError, "already registered"):
             dispatcher.register_handler(handler2)
 
     def test_register_decorator(self) -> None:
@@ -79,7 +79,7 @@ class TestDispatcherRegistration:
         async def handle_ping(params: dict[str, Any]) -> EmptyResult:
             return EmptyResult()
 
-        assert "adp.ping" in dispatcher.get_registered_methods()
+        self.assertIn("adp.ping", dispatcher.get_registered_methods())
 
     def test_register_decorator_duplicate_raises(self) -> None:
         dispatcher = Dispatcher()
@@ -88,7 +88,7 @@ class TestDispatcherRegistration:
         async def handle_ping(params: dict[str, Any]) -> EmptyResult:
             return EmptyResult()
 
-        with pytest.raises(ValueError, match="already registered"):
+        with self.assertRaisesRegex(ValueError, "already registered"):
 
             @dispatcher.register("adp.ping")
             async def handle_ping_again(params: dict[str, Any]) -> EmptyResult:
@@ -99,10 +99,10 @@ class TestDispatcherRegistration:
         handler = MockHandler()
 
         dispatcher.register_handler(handler)
-        assert "test.method" in dispatcher.get_registered_methods()
+        self.assertIn("test.method", dispatcher.get_registered_methods())
 
         dispatcher.unregister("test.method")
-        assert "test.method" not in dispatcher.get_registered_methods()
+        self.assertNotIn("test.method", dispatcher.get_registered_methods())
 
     def test_unregister_nonexistent_does_not_raise(self) -> None:
         dispatcher = Dispatcher()
@@ -111,7 +111,7 @@ class TestDispatcherRegistration:
 
     def test_get_registered_methods_empty(self) -> None:
         dispatcher = Dispatcher()
-        assert dispatcher.get_registered_methods() == []
+        self.assertEqual(dispatcher.get_registered_methods(), [])
 
     def test_get_registered_methods_multiple(self) -> None:
         dispatcher = Dispatcher()
@@ -119,15 +119,14 @@ class TestDispatcherRegistration:
         dispatcher.register_handler(MockHandler("method.two"))
 
         methods = dispatcher.get_registered_methods()
-        assert "method.one" in methods
-        assert "method.two" in methods
-        assert len(methods) == 2
+        self.assertIn("method.one", methods)
+        self.assertIn("method.two", methods)
+        self.assertEqual(len(methods), 2)
 
 
-class TestDispatcherDispatch:
+class TestDispatcherDispatch(unittest.IsolatedAsyncioTestCase):
     """Tests for message dispatching."""
 
-    @pytest.mark.asyncio
     async def test_dispatch_success(self) -> None:
         dispatcher = Dispatcher()
         dispatcher.register_handler(MockHandler())
@@ -144,12 +143,11 @@ class TestDispatcherDispatch:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["jsonrpc"] == "2.0"
-        assert response["id"] == 1
-        assert response["result"]["value"] == "hello"
-        assert "error" not in response
+        self.assertEqual(response["jsonrpc"], "2.0")
+        self.assertEqual(response["id"], 1)
+        self.assertEqual(response["result"]["value"], "hello")
+        self.assertNotIn("error", response)
 
-    @pytest.mark.asyncio
     async def test_dispatch_with_decorator_handler(self) -> None:
         dispatcher = Dispatcher()
 
@@ -168,11 +166,10 @@ class TestDispatcherDispatch:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["jsonrpc"] == "2.0"
-        assert response["id"] == 1
-        assert "result" in response
+        self.assertEqual(response["jsonrpc"], "2.0")
+        self.assertEqual(response["id"], 1)
+        self.assertIn("result", response)
 
-    @pytest.mark.asyncio
     async def test_dispatch_without_params(self) -> None:
         dispatcher = Dispatcher()
         dispatcher.register_handler(MockHandler())
@@ -188,25 +185,23 @@ class TestDispatcherDispatch:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["result"]["value"] == "default"
+        self.assertEqual(response["result"]["value"], "default")
 
 
-class TestDispatcherErrors:
+class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
     """Tests for error handling."""
 
-    @pytest.mark.asyncio
     async def test_dispatch_parse_error(self) -> None:
         dispatcher = Dispatcher()
 
         response_str = await dispatcher.dispatch("not valid json{")
         response = json.loads(response_str)
 
-        assert response["jsonrpc"] == "2.0"
-        assert response["id"] is None
-        assert response["error"]["code"] == -32700  # Parse error
-        assert "Invalid JSON" in response["error"]["message"]
+        self.assertEqual(response["jsonrpc"], "2.0")
+        self.assertIsNone(response["id"])
+        self.assertEqual(response["error"]["code"], -32700)  # Parse error
+        self.assertIn("Invalid JSON", response["error"]["message"])
 
-    @pytest.mark.asyncio
     async def test_dispatch_invalid_request(self) -> None:
         dispatcher = Dispatcher()
 
@@ -216,10 +211,9 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["error"]["code"] == -32600  # Invalid request
-        assert response["id"] is None
+        self.assertEqual(response["error"]["code"], -32600)  # Invalid request
+        self.assertIsNone(response["id"])
 
-    @pytest.mark.asyncio
     async def test_dispatch_method_not_found(self) -> None:
         dispatcher = Dispatcher()
 
@@ -234,12 +228,11 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["jsonrpc"] == "2.0"
-        assert response["id"] == 1
-        assert response["error"]["code"] == -32601  # Method not found
-        assert "nonexistent.method" in response["error"]["message"]
+        self.assertEqual(response["jsonrpc"], "2.0")
+        self.assertEqual(response["id"], 1)
+        self.assertEqual(response["error"]["code"], -32601)  # Method not found
+        self.assertIn("nonexistent.method", response["error"]["message"])
 
-    @pytest.mark.asyncio
     async def test_dispatch_handler_validation_error(self) -> None:
         dispatcher = Dispatcher()
         dispatcher.register_handler(ErrorHandler())
@@ -256,9 +249,8 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["error"]["code"] == -32602  # Invalid params
+        self.assertEqual(response["error"]["code"], -32602)  # Invalid params
 
-    @pytest.mark.asyncio
     async def test_dispatch_handler_unexpected_error(self) -> None:
         dispatcher = Dispatcher()
         dispatcher.register_handler(ErrorHandler())
@@ -275,9 +267,8 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["error"]["code"] == -32603  # Internal error
+        self.assertEqual(response["error"]["code"], -32603)  # Internal error
 
-    @pytest.mark.asyncio
     async def test_dispatch_preserves_request_id_on_error(self) -> None:
         dispatcher = Dispatcher()
 
@@ -292,9 +283,8 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["id"] == "my-request-id"
+        self.assertEqual(response["id"], "my-request-id")
 
-    @pytest.mark.asyncio
     async def test_dispatch_string_request_id(self) -> None:
         dispatcher = Dispatcher()
         dispatcher.register_handler(MockHandler())
@@ -310,10 +300,10 @@ class TestDispatcherErrors:
         response_str = await dispatcher.dispatch(request)
         response = json.loads(response_str)
 
-        assert response["id"] == "string-id-123"
+        self.assertEqual(response["id"], "string-id-123")
 
 
-class TestDispatcherUtilities:
+class TestDispatcherUtilities(unittest.TestCase):
     """Tests for utility methods."""
 
     def test_parse_request_valid(self) -> None:
@@ -330,16 +320,16 @@ class TestDispatcherUtilities:
 
         request = dispatcher.parse_request(message)
 
-        assert request.id == 1
-        assert request.method == "test.method"
-        assert request.params == {"key": "value"}
+        self.assertEqual(request.id, 1)
+        self.assertEqual(request.method, "test.method")
+        self.assertEqual(request.params, {"key": "value"})
 
     def test_parse_request_invalid_json(self) -> None:
         dispatcher = Dispatcher()
 
         from adp_hypervisor.protocol import ParseError
 
-        with pytest.raises(ParseError):
+        with self.assertRaises(ParseError):
             dispatcher.parse_request("invalid json")
 
     def test_parse_request_invalid_structure(self) -> None:
@@ -347,7 +337,7 @@ class TestDispatcherUtilities:
 
         from adp_hypervisor.protocol import InvalidRequestError
 
-        with pytest.raises(InvalidRequestError):
+        with self.assertRaises(InvalidRequestError):
             dispatcher.parse_request(json.dumps({"not": "valid"}))
 
     def test_build_response(self) -> None:
@@ -356,8 +346,8 @@ class TestDispatcherUtilities:
 
         response = dispatcher.build_response(1, result)
 
-        assert response.id == 1
-        assert response.result == {"value": "test"}
+        self.assertEqual(response.id, 1)
+        self.assertEqual(response.result, {"value": "test"})
 
     def test_build_error(self) -> None:
         dispatcher = Dispatcher()
@@ -365,6 +355,6 @@ class TestDispatcherUtilities:
 
         response = dispatcher.build_error(1, error)
 
-        assert response.id == 1
-        assert response.error.code == -32601
-        assert "test.method" in response.error.message
+        self.assertEqual(response.id, 1)
+        self.assertEqual(response.error.code, -32601)
+        self.assertIn("test.method", response.error.message)

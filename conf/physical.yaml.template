@@ -7,15 +7,15 @@ version: "1.0.0"
 
 backends:
   # RDBMS Backend Example
-  - id: "my_database"
-    type: "RDBMS"
-    config:
-      type: "RDBMS"
-      uri: "postgresql://localhost:5432/mydb"
-      schema: "public"
-    credentials:
-      type: "env"
-      key: "DB_PASSWORD"
+  # - id: "my_database"
+  #   type: "RDBMS"
+  #   config:
+  #     type: "RDBMS"
+  #     uri: "postgresql://localhost:5432/mydb"
+  #     schema: "public"
+  #   credentials:
+  #     type: "env"
+  #     key: "DB_PASSWORD"
 
   # Vector Backend Example
   # - id: "my_vectors"

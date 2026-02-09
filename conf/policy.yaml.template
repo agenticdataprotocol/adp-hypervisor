@@ -8,18 +8,18 @@ version: "1.0.0"
 # Bootstrap Mode (no enforcements):
 # policies: []
 
-policies:
-  - resourceId: "com.example:my_table"
-    rules:
-      # Operational constraint: limit results
-      - type: "OPERATIONAL"
-        enforceLimit: 100
-        defaultOrderBy:
-          fieldId: "id"
-          direction: "ASC"
-
-      # Mandatory filter example (uncomment to enable):
-      # - type: "MANDATORY_FILTER"
-      #   fieldId: "status"
-      #   op: "EQ"
-      #   value: "active"
+# policies:
+#   - resourceId: "com.example:my_table"
+#     rules:
+#       # Operational constraint: limit results
+#       - type: "OPERATIONAL"
+#         enforceLimit: 100
+#         defaultOrderBy:
+#           fieldId: "id"
+#           direction: "ASC"
+#
+#       # Mandatory filter example (uncomment to enable):
+#       - type: "MANDATORY_FILTER"
+#         fieldId: "status"
+#         op: "EQ"
+#         value: "active"

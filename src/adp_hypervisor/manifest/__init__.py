@@ -1,9 +1,9 @@
 """ADP Curation Manifest models and providers."""
 
-from adp_hypervisor.manifest.base import ManifestProvider
+from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.physical import (
+    Backend,
     BackendConfig,
-    BackendDefinition,
     BackendType,
     CredentialReference,
     GraphBackendConfig,
@@ -21,16 +21,23 @@ from adp_hypervisor.manifest.policy import (
     PolicyRule,
     ResourcePolicy,
 )
+from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.manifest.semantic import (
     CuratedResource,
     SemanticManifest,
     SourceDefinition,
 )
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
+from adp_hypervisor.protocol.types import LATEST_PROTOCOL_VERSION as _LATEST_PROTOCOL_VERSION
+
+LATEST_MANIFEST_SCHEMA_VERSION = _LATEST_PROTOCOL_VERSION
 
 __all__ = [
-    # Provider
+    # Versioning
+    "LATEST_MANIFEST_SCHEMA_VERSION",
+    # Provider / Index
     "ManifestProvider",
+    "ManifestIndex",
     "YamlManifestProvider",
     # Physical
     "BackendType",
@@ -40,8 +47,8 @@ __all__ = [
     "S3BackendConfig",
     "NOSQLBackendConfig",
     "GraphBackendConfig",
+    "Backend",
     "BackendConfig",
-    "BackendDefinition",
     "PhysicalManifest",
     # Semantic
     "SourceDefinition",

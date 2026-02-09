@@ -1,5 +1,7 @@
 """Tests for Semantic Manifest models."""
 
+import unittest
+
 from adp_hypervisor.manifest.semantic import (
     CuratedResource,
     SemanticManifest,
@@ -12,11 +14,11 @@ from adp_hypervisor.protocol.types import FieldType, IntentClass
 # =============================================================================
 
 
-class TestSourceDefinition:
+class TestSourceDefinition(unittest.TestCase):
     def test_minimal_source(self) -> None:
         source = SourceDefinition(source="my_table")
-        assert source.source == "my_table"
-        assert source.fields is None
+        self.assertEqual(source.source, "my_table")
+        self.assertIsNone(source.fields)
 
     def test_source_with_fields(self) -> None:
         source = SourceDefinition.model_validate(
@@ -28,9 +30,10 @@ class TestSourceDefinition:
                 ],
             }
         )
-        assert len(source.fields) == 2  # type: ignore[arg-type]
-        assert source.fields[0].field_id == "id"  # type: ignore[index]
-        assert source.fields[0].type == FieldType.STRING  # type: ignore[index]
+        self.assertEqual(len(source.fields or []), 2)  # type: ignore[arg-type]
+        self.assertIsNotNone(source.fields)
+        self.assertEqual(source.fields[0].field_id, "id")  # type: ignore[index]
+        self.assertEqual(source.fields[0].type, FieldType.STRING)  # type: ignore[index]
 
 
 # =============================================================================
@@ -38,7 +41,7 @@ class TestSourceDefinition:
 # =============================================================================
 
 
-class TestCuratedResource:
+class TestCuratedResource(unittest.TestCase):
     def test_full_resource(self) -> None:
         resource = CuratedResource.model_validate(
             {
@@ -59,21 +62,22 @@ class TestCuratedResource:
                 ],
             }
         )
-        assert resource.resource_id == "com.acme:bank_failures"
-        assert resource.intent_classes == [IntentClass.QUERY]
-        assert resource.version == 1
-        assert resource.backend_id == "finance_sql"
-        assert resource.sources is not None
-        assert len(resource.sources) == 1
-        assert resource.sources[0].source == "v_failures_consolidated"
+        self.assertEqual(resource.resource_id, "com.acme:bank_failures")
+        self.assertEqual(resource.intent_classes, [IntentClass.QUERY])
+        self.assertEqual(resource.version, 1)
+        self.assertEqual(resource.backend_id, "finance_sql")
+        self.assertIsNotNone(resource.sources)
+        self.assertIsNotNone(resource.sources)
+        self.assertEqual(len(resource.sources), 1)
+        self.assertEqual(resource.sources[0].source, "v_failures_consolidated")
 
     def test_bootstrap_resource_minimal(self) -> None:
         """Bootstrap mode: only backendId is required."""
         resource = CuratedResource.model_validate({"backendId": "db1"})
-        assert resource.backend_id == "db1"
-        assert resource.resource_id is None
-        assert resource.sources is None
-        assert resource.intent_classes is None
+        self.assertEqual(resource.backend_id, "db1")
+        self.assertIsNone(resource.resource_id)
+        self.assertIsNone(resource.sources)
+        self.assertIsNone(resource.intent_classes)
 
     def test_wildcard_intent_class(self) -> None:
         resource = CuratedResource.model_validate(
@@ -83,7 +87,7 @@ class TestCuratedResource:
                 "backendId": "db1",
             }
         )
-        assert resource.intent_classes == [IntentClass.WILDCARD]
+        self.assertEqual(resource.intent_classes, [IntentClass.WILDCARD])
 
     def test_inherits_resource_fields(self) -> None:
         """CuratedResource inherits all fields from Resource."""
@@ -95,14 +99,14 @@ class TestCuratedResource:
                 "semanticDescription": "A test resource",
             }
         )
-        assert resource.tags == ["TAG1", "TAG2"]
-        assert resource.semantic_description == "A test resource"
+        self.assertEqual(resource.tags, ["TAG1", "TAG2"])
+        self.assertEqual(resource.semantic_description, "A test resource")
 
     def test_serialization_camel_case(self) -> None:
         resource = CuratedResource(backend_id="db1", version=1)
         dumped = resource.model_dump(by_alias=True, exclude_none=True)
-        assert "backendId" in dumped
-        assert dumped["backendId"] == "db1"
+        self.assertIn("backendId", dumped)
+        self.assertEqual(dumped["backendId"], "db1")
 
 
 # =============================================================================
@@ -110,7 +114,7 @@ class TestCuratedResource:
 # =============================================================================
 
 
-class TestSemanticManifest:
+class TestSemanticManifest(unittest.TestCase):
     def test_full_manifest(self) -> None:
         manifest = SemanticManifest.model_validate(
             {
@@ -131,10 +135,11 @@ class TestSemanticManifest:
                 ],
             }
         )
-        assert manifest.version == "1.0.0"
-        assert manifest.default_domain == "com.acme.finance"
-        assert manifest.resources is not None
-        assert len(manifest.resources) == 1
+        self.assertEqual(manifest.version, "1.0.0")
+        self.assertEqual(manifest.default_domain, "com.acme.finance")
+        self.assertIsNotNone(manifest.resources)
+        self.assertIsNotNone(manifest.resources)
+        self.assertEqual(len(manifest.resources), 1)
 
     def test_bootstrap_manifest_no_resources(self) -> None:
         """Bootstrap mode: no resources array."""
@@ -144,7 +149,7 @@ class TestSemanticManifest:
                 "defaultDomain": "com.acme.finance",
             }
         )
-        assert manifest.resources is None
+        self.assertIsNone(manifest.resources)
 
     def test_multi_version_resources(self) -> None:
         manifest = SemanticManifest.model_validate(
@@ -167,7 +172,8 @@ class TestSemanticManifest:
                 ],
             }
         )
-        assert manifest.resources is not None
-        assert len(manifest.resources) == 2
-        assert manifest.resources[0].version == 1
-        assert manifest.resources[1].version == 2
+        self.assertIsNotNone(manifest.resources)
+        self.assertIsNotNone(manifest.resources)
+        self.assertEqual(len(manifest.resources), 2)
+        self.assertEqual(manifest.resources[0].version, 1)
+        self.assertEqual(manifest.resources[1].version, 2)
