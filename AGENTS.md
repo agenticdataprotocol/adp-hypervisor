@@ -22,7 +22,7 @@ Code conventions for AI-assisted development on `adp-hypervisor`.
 - Use `self.assert*` methods. Do not use the bare `assert` keyword.
 - Naming: `test_<module>.py` → `Test<Feature>(unittest.TestCase)` → `test_<case>`.
 - Use `# ===...===` separators between test classes. Place helpers (stubs, factories) at file top with `_` prefix.
-- Run tests: `uv run pytest tests/`
+- Run tests: `uv run python -m unittest discover -s tests -v`
 
 ## Git Conventions
 
