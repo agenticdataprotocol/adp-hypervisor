@@ -402,8 +402,18 @@ class TestDiscoverTypes(unittest.TestCase):
         result = DiscoverResult.model_validate(
             {
                 "resources": [
-                    {"resourceId": "res1", "description": "Resource 1"},
-                    {"resourceId": "res2", "description": "Resource 2"},
+                    {
+                        "resourceId": "res1",
+                        "version": 1,
+                        "intentClasses": ["QUERY"],
+                        "description": "Resource 1",
+                    },
+                    {
+                        "resourceId": "res2",
+                        "version": 2,
+                        "intentClasses": ["LOOKUP"],
+                        "description": "Resource 2",
+                    },
                 ],
                 "nextCursor": "page2",
             }
@@ -816,7 +826,11 @@ class TestModelSerialization(unittest.TestCase):
         result = DiscoverResult.model_validate(
             {
                 "resources": [
-                    {"resourceId": "com.acme:users", "intentClasses": ["QUERY"]},
+                    {
+                        "resourceId": "com.acme:users",
+                        "version": 1,
+                        "intentClasses": ["QUERY"],
+                    },
                 ],
                 "nextCursor": "page2",
             }

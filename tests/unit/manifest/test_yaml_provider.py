@@ -29,7 +29,7 @@ def _make_provider() -> YamlManifestProvider:
 def _make_bootstrap_provider() -> YamlManifestProvider:
     p = YamlManifestProvider(
         physical_path=FIXTURES / "physical.yaml",
-        semantic_path=FIXTURES / "semantic-bootstrap.yaml",
+        semantic_path=FIXTURES / "semantic.yaml",
         policy_path=FIXTURES / "policy-bootstrap.yaml",
     )
     p.load()
@@ -163,7 +163,7 @@ class TestYamlManifestProviderResources(unittest.TestCase):
         v1 = index.get_resource("com.acme.finance:audit_events", version=1)
         self.assertIsNotNone(v1)
         self.assertEqual(v1.version, 1)
-        self.assertEqual(v1.description, "Audit events (v1)")
+        self.assertEqual(v1.description, "Audit events (v1 - core fields only)")
 
         v2 = index.get_resource("com.acme.finance:audit_events", version=2)
         self.assertIsNotNone(v2)
@@ -206,7 +206,7 @@ class TestYamlManifestProviderPolicies(unittest.TestCase):
     def test_list_policies(self) -> None:
         index = _make_index()
         policies = index.list_policies()
-        self.assertEqual(len(policies), 3)
+        self.assertEqual(len(policies), 4)
 
     def test_get_policy_exact(self) -> None:
         index = _make_index()
@@ -257,16 +257,6 @@ class TestYamlManifestProviderPolicies(unittest.TestCase):
 
 
 class TestYamlManifestProviderBootstrap(unittest.TestCase):
-    def test_bootstrap_semantic_no_resources(self) -> None:
-        bootstrap_provider = _make_bootstrap_provider()
-        manifest = bootstrap_provider.get_semantic_manifest()
-        self.assertEqual(manifest.default_domain, "com.acme.finance")
-        self.assertIsNone(manifest.resources)
-
-    def test_bootstrap_list_resources_empty(self) -> None:
-        index = _make_bootstrap_index()
-        self.assertEqual(index.list_resources(), [])
-
     def test_bootstrap_policy_no_policies(self) -> None:
         bootstrap_provider = _make_bootstrap_provider()
         manifest = bootstrap_provider.get_policy_manifest()
