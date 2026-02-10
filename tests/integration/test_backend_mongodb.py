@@ -4,7 +4,8 @@ Uses testcontainers to spin up a real MongoDB instance and exercises
 connect, LOOKUP, and QUERY intents end-to-end.
 """
 
-import pytest
+import unittest
+
 from testcontainers.mongodb import MongoDbContainer
 
 from adp_hypervisor.manifest.physical import (
@@ -27,20 +28,20 @@ from adp_hypervisor.protocol.types import (
 from backends.nosql.mongodb import MongoDBBackend
 
 # =============================================================================
-# Fixtures
+# Module-level container and backend definition
 # =============================================================================
 
-
-@pytest.fixture(scope="module")
-def mongo_container():
-    """Start a MongoDB container for the test module."""
-    with MongoDbContainer("mongo:7") as mongo:
-        yield mongo
+_mongo_container = None
+_backend_definition = None
 
 
-@pytest.fixture(scope="module")
-def backend_definition(mongo_container) -> BackendDefinition:
-    connection_url = mongo_container.get_connection_url()
+def setUpModule() -> None:
+    """Set up MongoDB container for all tests in this module."""
+    global _mongo_container, _backend_definition
+    _mongo_container = MongoDbContainer("mongo:7")
+    _mongo_container.start()
+
+    connection_url = _mongo_container.get_connection_url()
 
     # MongoDB connection URL format: mongodb://user:pass@host:port or mongodb://user:pass@host:port/database
     # If there's a database in the URL, extract it; otherwise use "test"
@@ -57,33 +58,18 @@ def backend_definition(mongo_container) -> BackendDefinition:
         {"type": "NOSQL", "uri": uri, "database": database, "provider": "MONGODB"}
     )
 
-    return BackendDefinition(
+    _backend_definition = BackendDefinition(
         id="test_mongo",
         type=BackendType.NOSQL,
         config=config,
     )
 
 
-@pytest.fixture()
-async def backend(backend_definition, mongo_container):
-    """Create, connect, seed, and yield a MongoDBBackend; disconnect on teardown."""
-    be = MongoDBBackend(definition=backend_definition)
-    await be.connect()
-
-    # Seed the test collection
-    db = be._db
-    collection = db["users"]
-    await collection.delete_many({})
-    await collection.insert_many(
-        [
-            {"name": "Alice", "age": 30},
-            {"name": "Bob", "age": 25},
-            {"name": "Charlie", "age": 35},
-        ]
-    )
-
-    yield be
-    await be.disconnect()
+def tearDownModule() -> None:
+    """Tear down MongoDB container after all tests."""
+    global _mongo_container
+    if _mongo_container is not None:
+        _mongo_container.stop()
 
 
 # =============================================================================
@@ -91,16 +77,16 @@ async def backend(backend_definition, mongo_container):
 # =============================================================================
 
 
-class TestConnection:
-    async def test_connect_and_disconnect(self, backend_definition):
-        be = MongoDBBackend(definition=backend_definition)
+class TestConnection(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_and_disconnect(self) -> None:
+        be = MongoDBBackend(definition=_backend_definition)
         await be.connect()
-        assert be._client is not None
+        self.assertIsNotNone(be._client)
         await be.disconnect()
-        assert be._client is None
+        self.assertIsNone(be._client)
 
-    async def test_disconnect_when_not_connected(self, backend_definition):
-        be = MongoDBBackend(definition=backend_definition)
+    async def test_disconnect_when_not_connected(self) -> None:
+        be = MongoDBBackend(definition=_backend_definition)
         await be.disconnect()  # should not raise
 
 
@@ -109,16 +95,37 @@ class TestConnection:
 # =============================================================================
 
 
-class TestSchemaDiscovery:
-    async def test_get_schema(self, backend):
-        fields = await backend.get_schema("users")
-        assert len(fields) >= 3
+class TestSchemaDiscovery(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend and seed data for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+        # Seed the test collection
+        db = self.backend._db
+        collection = db["users"]
+        await collection.delete_many({})
+        await collection.insert_many(
+            [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25},
+                {"name": "Charlie", "age": 35},
+            ]
+        )
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_get_schema(self) -> None:
+        fields = await self.backend.get_schema("users")
+        self.assertGreaterEqual(len(fields), 3)
 
         field_map = {f.field_id: f for f in fields}
-        assert "name" in field_map
-        assert "age" in field_map
-        assert field_map["name"].type == FieldType.STRING
-        assert field_map["age"].type == FieldType.INTEGER
+        self.assertIn("name", field_map)
+        self.assertIn("age", field_map)
+        self.assertEqual(field_map["name"].type, FieldType.STRING)
+        self.assertEqual(field_map["age"].type, FieldType.INTEGER)
 
 
 # =============================================================================
@@ -126,32 +133,53 @@ class TestSchemaDiscovery:
 # =============================================================================
 
 
-class TestLookupIntent:
-    async def test_lookup_by_name(self, backend):
+class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend and seed data for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+        # Seed the test collection
+        db = self.backend._db
+        collection = db["users"]
+        await collection.delete_many({})
+        await collection.insert_many(
+            [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25},
+                {"name": "Charlie", "age": 35},
+            ]
+        )
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_lookup_by_name(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Alice"
-        assert result.rows[0]["age"] == 30
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Alice")
+        self.assertEqual(result.rows[0]["age"], 30)
 
-    async def test_lookup_with_projections(self, backend):
+    async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="name", value="Bob"),
             projections=["name"],
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Bob"
-        assert "age" not in result.rows[0]
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Bob")
+        self.assertNotIn("age", result.rows[0])
 
-    async def test_lookup_not_found(self, backend):
+    async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="name", value="NonExistent"),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 0
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 0)
 
 
 # =============================================================================
@@ -159,8 +187,29 @@ class TestLookupIntent:
 # =============================================================================
 
 
-class TestQueryIntent:
-    async def test_query_all(self, backend):
+class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend and seed data for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+        # Seed the test collection
+        db = self.backend._db
+        collection = db["users"]
+        await collection.delete_many({})
+        await collection.insert_many(
+            [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25},
+                {"name": "Charlie", "age": 35},
+            ]
+        )
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_query_all(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -169,10 +218,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 3
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 3)
 
-    async def test_query_with_filter(self, backend):
+    async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -181,12 +230,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_with_order_and_limit(self, backend):
+    async def test_query_with_order_and_limit(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -197,12 +246,12 @@ class TestQueryIntent:
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=2,
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
-        assert result.rows[0]["name"] == "Bob"
-        assert result.rows[1]["name"] == "Alice"
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
+        self.assertEqual(result.rows[0]["name"], "Bob")
+        self.assertEqual(result.rows[1]["name"], "Alice")
 
-    async def test_query_with_projections(self, backend):
+    async def test_query_with_projections(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -212,13 +261,13 @@ class TestQueryIntent:
             ),
             projections=["name", "age"],
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Charlie"
-        assert result.rows[0]["age"] == 35
-        assert "_id" not in result.rows[0]
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Charlie")
+        self.assertEqual(result.rows[0]["age"], 35)
+        self.assertNotIn("_id", result.rows[0])
 
-    async def test_query_in_operator(self, backend):
+    async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -227,10 +276,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
 
-    async def test_query_in_empty_list_raises(self, backend):
+    async def test_query_in_empty_list_raises(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -239,10 +288,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        with pytest.raises(ValueError, match="non-empty list"):
-            await backend.execute("users", intent)
+        with self.assertRaisesRegex(ValueError, "non-empty list"):
+            await self.backend.execute("users", intent)
 
-    async def test_query_contains_substring(self, backend):
+    async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -251,12 +300,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_or_predicates(self, backend):
+    async def test_query_or_predicates(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="OR",
@@ -266,12 +315,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_nested_predicates(self, backend):
+    async def test_query_nested_predicates(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -287,10 +336,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Bob"}
+        self.assertEqual(names, {"Alice", "Bob"})
 
 
 # =============================================================================
@@ -298,15 +347,24 @@ class TestQueryIntent:
 # =============================================================================
 
 
-class TestValidate:
-    async def test_validate_valid_lookup(self, backend):
+class TestValidate(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_validate_valid_lookup(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
-        issues = await backend.validate("users", intent)
-        assert issues == []
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(issues, [])
 
-    async def test_validate_valid_query(self, backend):
+    async def test_validate_valid_query(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -315,8 +373,8 @@ class TestValidate:
                 ],
             ),
         )
-        issues = await backend.validate("users", intent)
-        assert issues == []
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(issues, [])
 
 
 # =============================================================================
@@ -324,13 +382,22 @@ class TestValidate:
 # =============================================================================
 
 
-class TestUnsupportedIntents:
-    async def test_ingest_not_supported(self, backend):
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        with pytest.raises(NotImplementedError, match="INGEST"):
-            await backend.execute("users", intent)
+class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
 
-    async def test_revise_not_supported(self, backend):
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_ingest_not_supported(self) -> None:
+        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
+        with self.assertRaisesRegex(NotImplementedError, "INGEST"):
+            await self.backend.execute("users", intent)
+
+    async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -340,11 +407,11 @@ class TestUnsupportedIntents:
             ),
             payload={"name": "Updated"},
         )
-        with pytest.raises(NotImplementedError, match="REVISE"):
-            await backend.execute("users", intent)
+        with self.assertRaisesRegex(NotImplementedError, "REVISE"):
+            await self.backend.execute("users", intent)
 
-    async def test_validate_ingest_returns_issue(self, backend):
+    async def test_validate_ingest_returns_issue(self) -> None:
         intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        issues = await backend.validate("users", intent)
-        assert len(issues) == 1
-        assert issues[0].severity == "BLOCKING"
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].severity, "BLOCKING")

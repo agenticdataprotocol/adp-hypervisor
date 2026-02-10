@@ -192,8 +192,15 @@ uv run python -m unittest tests.unit.backends.nosql.test_mongodb -v
 Run integration tests with real MongoDB instance (requires Docker):
 
 ```bash
-uv run pytest tests/integration/test_backend_mongodb.py -v
+uv run python -m unittest tests.integration.test_backend_mongodb -v
 ```
+
+**Note**: Integration tests require Docker to be running and accessible. The tests use `testcontainers` to automatically spin up a MongoDB container. Ensure:
+- Docker daemon is running
+- You have network connectivity to Docker Hub
+- Docker is properly configured on your system
+
+The integration tests use `unittest.IsolatedAsyncioTestCase` for async test support and module-level setup/teardown for container lifecycle management.
 
 ## Dependencies
 
