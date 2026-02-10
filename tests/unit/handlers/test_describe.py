@@ -33,16 +33,15 @@ def _make_fields() -> list[Field]:
 
 def _make_resource(
     resource_id: str = "com.acme:test_resource",
-    intent_classes: list[str] | None = None,
+    intent_classes: list[str] = ["QUERY", "LOOKUP"],  # noqa: B006  # required per spec
     version: int = 1,
     fields: list[Field] | None = None,
 ) -> CuratedResource:
-    resolved_intents = intent_classes if intent_classes is not None else ["QUERY", "LOOKUP"]
     if fields is None:
         fields = _make_fields()
     return CuratedResource(
         resource_id=resource_id,
-        intent_classes=resolved_intents,
+        intent_classes=intent_classes,
         version=version,
         description="Test resource",
         backend_id="test_backend",
