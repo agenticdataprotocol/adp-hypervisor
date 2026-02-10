@@ -1,6 +1,7 @@
 """ADP Protocol type definitions and error handling."""
 
-from adp_hypervisor.protocol.dispatcher import Dispatcher, Handler
+from adp_hypervisor.handlers.base import Handler
+from adp_hypervisor.protocol.dispatcher import Dispatcher
 from adp_hypervisor.protocol.errors import (
     EXECUTION_FAILED,
     INTERNAL_ERROR,

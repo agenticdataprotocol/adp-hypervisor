@@ -7,12 +7,12 @@ method routing, and response wrapping for the ADP server.
 
 import json
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from adp_hypervisor.handlers.base import Handler
 from adp_hypervisor.protocol.errors import (
     ADPError,
     InternalError,
@@ -30,22 +30,6 @@ from adp_hypervisor.protocol.jsonrpc import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Type variable for handler result types
-TResult = TypeVar("TResult", bound=BaseModel)
-
-
-class Handler(ABC):
-    """Handler abstract base class for processing ADP requests."""
-
-    @property
-    @abstractmethod
-    def method(self) -> str:
-        """Return the method name this handler processes."""
-
-    @abstractmethod
-    async def handle(self, params: dict[str, Any]) -> BaseModel:
-        """Process request and return result."""
 
 
 # Type alias for handler functions
