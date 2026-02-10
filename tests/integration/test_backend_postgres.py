@@ -4,7 +4,8 @@ Uses testcontainers to spin up a real PostgreSQL instance and exercises
 connect, LOOKUP, and QUERY intents end-to-end.
 """
 
-import pytest
+import unittest
+
 from testcontainers.postgres import PostgresContainer
 
 from adp_hypervisor.manifest.physical import (
@@ -26,7 +27,7 @@ from adp_hypervisor.protocol.types import (
 from backends.rdbms.postgres import PostgresBackend
 
 # =============================================================================
-# Fixtures
+# Module-level fixtures
 # =============================================================================
 
 _TABLE_DDL = """
@@ -41,42 +42,62 @@ INSERT INTO users (name, age) VALUES
     ('Charlie', 35);
 """
 
+_pg_container: PostgresContainer | None = None
+_backend_definition: BackendDefinition | None = None
 
-@pytest.fixture(scope="module")
-def pg_container():
+
+def setUpModule() -> None:
     """Start a PostgreSQL container for the test module."""
-    with PostgresContainer("postgres:16-alpine") as pg:
-        yield pg
-
-
-@pytest.fixture(scope="module")
-def backend_definition(pg_container) -> BackendDefinition:
-    url = pg_container.get_connection_url()
+    global _pg_container, _backend_definition  # noqa: PLW0603
+    _pg_container = PostgresContainer("postgres:16-alpine")
+    _pg_container.start()
+    url = _pg_container.get_connection_url()
     # testcontainers returns a SQLAlchemy-style URL (e.g. postgresql+psycopg2://...);
     # asyncpg requires a plain postgresql:// scheme.
     dsn = url.split("://", 1)[-1]
     dsn = f"postgresql://{dsn}"
-    return BackendDefinition(
+    _backend_definition = BackendDefinition(
         id="test_pg",
         type=BackendType.RDBMS,
         config=RDBMSBackendConfig(uri=dsn),
     )
 
 
-@pytest.fixture()
-async def backend(backend_definition, pg_container):
-    """Create, connect, seed, and yield a PostgresBackend; disconnect on teardown."""
-    be = PostgresBackend(definition=backend_definition)
-    await be.connect()
+def tearDownModule() -> None:
+    """Stop the PostgreSQL container."""
+    global _pg_container  # noqa: PLW0603
+    if _pg_container is not None:
+        _pg_container.stop()
+        _pg_container = None
 
-    # Seed the test table
-    pool = be._pool
-    async with pool.acquire() as conn:
-        await conn.execute("DROP TABLE IF EXISTS users")
-        await conn.execute(_TABLE_DDL)
 
-    yield be
-    await be.disconnect()
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _get_backend_definition() -> BackendDefinition:
+    """Return the module-level backend definition, raising if not initialised."""
+    if _backend_definition is None:
+        raise RuntimeError("setUpModule was not called")
+    return _backend_definition
+
+
+class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
+    """Base that creates, seeds, and tears down a PostgresBackend per test."""
+
+    backend: PostgresBackend
+
+    async def asyncSetUp(self) -> None:
+        self.backend = PostgresBackend(definition=_get_backend_definition())
+        await self.backend.connect()
+        pool = self.backend._pool
+        async with pool.acquire() as conn:
+            await conn.execute("DROP TABLE IF EXISTS users")
+            await conn.execute(_TABLE_DDL)
+
+    async def asyncTearDown(self) -> None:
+        await self.backend.disconnect()
 
 
 # =============================================================================
@@ -84,16 +105,16 @@ async def backend(backend_definition, pg_container):
 # =============================================================================
 
 
-class TestConnection:
-    async def test_connect_and_disconnect(self, backend_definition):
-        be = PostgresBackend(definition=backend_definition)
+class TestConnection(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_and_disconnect(self) -> None:
+        be = PostgresBackend(definition=_get_backend_definition())
         await be.connect()
-        assert be._pool is not None
+        self.assertIsNotNone(be._pool)
         await be.disconnect()
-        assert be._pool is None
+        self.assertIsNone(be._pool)
 
-    async def test_disconnect_when_not_connected(self, backend_definition):
-        be = PostgresBackend(definition=backend_definition)
+    async def test_disconnect_when_not_connected(self) -> None:
+        be = PostgresBackend(definition=_get_backend_definition())
         await be.disconnect()  # should not raise
 
 
@@ -102,31 +123,31 @@ class TestConnection:
 # =============================================================================
 
 
-class TestLookupIntent:
-    async def test_lookup_by_id(self, backend):
+class TestLookupIntent(_SeededBackendMixin):
+    async def test_lookup_by_id(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="id", value=1),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Alice"
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Alice")
 
-    async def test_lookup_with_projections(self, backend):
+    async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="id", value=2),
             projections=["name"],
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Bob"
-        assert "age" not in result.rows[0]
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Bob")
+        self.assertNotIn("age", result.rows[0])
 
-    async def test_lookup_not_found(self, backend):
+    async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="id", value=999),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 0
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 0)
 
 
 # =============================================================================
@@ -134,8 +155,8 @@ class TestLookupIntent:
 # =============================================================================
 
 
-class TestQueryIntent:
-    async def test_query_all(self, backend):
+class TestQueryIntent(_SeededBackendMixin):
+    async def test_query_all(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -144,10 +165,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 3
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 3)
 
-    async def test_query_with_filter(self, backend):
+    async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -156,12 +177,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_with_order_and_limit(self, backend):
+    async def test_query_with_order_and_limit(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -172,12 +193,12 @@ class TestQueryIntent:
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=2,
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
-        assert result.rows[0]["name"] == "Bob"
-        assert result.rows[1]["name"] == "Alice"
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
+        self.assertEqual(result.rows[0]["name"], "Bob")
+        self.assertEqual(result.rows[1]["name"], "Alice")
 
-    async def test_query_with_projections(self, backend):
+    async def test_query_with_projections(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -187,13 +208,13 @@ class TestQueryIntent:
             ),
             projections=["name", "age"],
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 1
-        assert result.rows[0]["name"] == "Charlie"
-        assert result.rows[0]["age"] == 35
-        assert "id" not in result.rows[0]
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0]["name"], "Charlie")
+        self.assertEqual(result.rows[0]["age"], 35)
+        self.assertNotIn("id", result.rows[0])
 
-    async def test_query_in_operator(self, backend):
+    async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -202,10 +223,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
 
-    async def test_query_in_empty_list_raises(self, backend):
+    async def test_query_in_empty_list_raises(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -214,10 +235,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        with pytest.raises(ValueError, match="non-empty list"):
-            await backend.execute("users", intent)
+        with self.assertRaisesRegex(ValueError, "non-empty list"):
+            await self.backend.execute("users", intent)
 
-    async def test_query_contains_substring(self, backend):
+    async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -226,12 +247,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_or_predicates(self, backend):
+    async def test_query_or_predicates(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="OR",
@@ -241,12 +262,12 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Charlie"}
+        self.assertEqual(names, {"Alice", "Charlie"})
 
-    async def test_query_nested_predicates(self, backend):
+    async def test_query_nested_predicates(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -262,10 +283,10 @@ class TestQueryIntent:
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
-        assert len(result.rows) == 2
+        result = await self.backend.execute("users", intent)
+        self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
-        assert names == {"Alice", "Bob"}
+        self.assertEqual(names, {"Alice", "Bob"})
 
 
 # =============================================================================
@@ -273,15 +294,15 @@ class TestQueryIntent:
 # =============================================================================
 
 
-class TestValidate:
-    async def test_validate_valid_lookup(self, backend):
+class TestValidate(_SeededBackendMixin):
+    async def test_validate_valid_lookup(self) -> None:
         intent = LookupIntent(
             key=IdentityPredicate(field_id="id", value=1),
         )
-        issues = await backend.validate("users", intent)
-        assert issues == []
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(issues, [])
 
-    async def test_validate_valid_query(self, backend):
+    async def test_validate_valid_query(self) -> None:
         intent = QueryIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -290,8 +311,8 @@ class TestValidate:
                 ],
             ),
         )
-        issues = await backend.validate("users", intent)
-        assert issues == []
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(issues, [])
 
 
 # =============================================================================
@@ -299,13 +320,13 @@ class TestValidate:
 # =============================================================================
 
 
-class TestUnsupportedIntents:
-    async def test_ingest_not_supported(self, backend):
+class TestUnsupportedIntents(_SeededBackendMixin):
+    async def test_ingest_not_supported(self) -> None:
         intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        with pytest.raises(NotImplementedError, match="INGEST"):
-            await backend.execute("users", intent)
+        with self.assertRaisesRegex(NotImplementedError, "INGEST"):
+            await self.backend.execute("users", intent)
 
-    async def test_revise_not_supported(self, backend):
+    async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
             predicates=PredicateGroup(
                 op="AND",
@@ -315,11 +336,11 @@ class TestUnsupportedIntents:
             ),
             payload={"name": "Updated"},
         )
-        with pytest.raises(NotImplementedError, match="REVISE"):
-            await backend.execute("users", intent)
+        with self.assertRaisesRegex(NotImplementedError, "REVISE"):
+            await self.backend.execute("users", intent)
 
-    async def test_validate_ingest_returns_issue(self, backend):
+    async def test_validate_ingest_returns_issue(self) -> None:
         intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        issues = await backend.validate("users", intent)
-        assert len(issues) == 1
-        assert issues[0].severity == "BLOCKING"
+        issues = await self.backend.validate("users", intent)
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0].severity, "BLOCKING")
