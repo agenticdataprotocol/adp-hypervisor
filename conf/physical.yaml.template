@@ -37,3 +37,15 @@ backends:
   #     type: "S3"
   #     uri: "s3://my-bucket/"
   #     region: "us-east-1"
+
+  # MongoDB Backend Example
+  # - id: "my_mongodb"
+  #   type: "NOSQL"
+  #   config:
+  #     type: "NOSQL"
+  #     provider: "MONGODB"
+  #     uri: "mongodb://localhost:27017"
+  #     database: "myapp"
+  #   credentials:
+  #     type: "env"
+  #     key: "MONGO_PASSWORD"
