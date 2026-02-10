@@ -65,7 +65,10 @@ class SemanticManifest(ADPModel):
 
     version: str = PydanticField(
         ...,
-        description="Version of the manifest schema. Identifies which spec version this manifest follows.",
+        description=(
+            "Version of the manifest schema. Identifies which spec version this "
+            "manifest follows."
+        ),
     )
     resources: list[CuratedResource] = PydanticField(
         ...,
