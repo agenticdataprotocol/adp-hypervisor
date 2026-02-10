@@ -460,7 +460,7 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
             intent_classes=["QUERY"],
             version=1,
             backend_id="test",
-            sources=None,
+            sources=[],
         )
         handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(

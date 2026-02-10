@@ -107,7 +107,10 @@ _register_operators(_CONTAINER_TYPES, _CONTAINER_OPS)
 _register_operators(_VECTOR_TYPES, _VECTOR_OPS)
 
 
-def _get_operators_for_field(field_type: FieldType) -> list[PredicateOperator]:
+def _get_operators_for_field(field_type: FieldType | None) -> list[PredicateOperator]:
+    """Return allowed predicate operators for a given field type."""
+    if field_type is None:
+        return [PredicateOperator.EQ]
     return list(_OPERATORS_BY_FIELD_TYPE.get(field_type, [PredicateOperator.EQ]))
 
 
