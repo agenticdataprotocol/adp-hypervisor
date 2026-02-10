@@ -456,6 +456,21 @@ class TestDescribeTypes(unittest.TestCase):
         self.assertFalse(field.is_masked)
         self.assertTrue(field.is_searchable)
 
+    def test_field_without_type_is_allowed(self) -> None:
+        """Field.type is optional; when omitted it should not appear in dumps."""
+        field = Field.model_validate({"fieldId": "payload"})
+        self.assertEqual(field.field_id, "payload")
+        self.assertIsNone(field.type)
+
+        # By default, dumps should include type=None (since it is part of the model).
+        dumped = field.model_dump(by_alias=True)
+        self.assertIn("type", dumped)
+        self.assertIsNone(dumped["type"])
+
+        # When exclude_none is used, the type field should be omitted entirely.
+        dumped_excluding_none = field.model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(dumped_excluding_none, {"fieldId": "payload"})
+
     def test_predicate_capability(self) -> None:
         cap = PredicateCapability.model_validate(
             {
