@@ -37,13 +37,12 @@ def _make_resource(
     version: int = 1,
     fields: list[Field] | None = None,
 ) -> CuratedResource:
-    if intent_classes is None:
-        intent_classes = ["QUERY", "LOOKUP"]
+    resolved_intents = intent_classes if intent_classes is not None else ["QUERY", "LOOKUP"]
     if fields is None:
         fields = _make_fields()
     return CuratedResource(
         resource_id=resource_id,
-        intent_classes=intent_classes,
+        intent_classes=resolved_intents,
         version=version,
         description="Test resource",
         backend_id="test_backend",
@@ -368,9 +367,8 @@ class TestDescribeHandlerIntentClassValidation(unittest.IsolatedAsyncioTestCase)
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["intentClass"], "QUERY")
 
-    async def test_resource_without_intent_classes_rejected(self) -> None:
-        resource = _make_resource(intent_classes=None)
-        resource.intent_classes = None
+    async def test_resource_with_empty_intent_classes_rejected(self) -> None:
+        resource = _make_resource(intent_classes=[])
         handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         with self.assertRaisesRegex(InvalidParamsError, "does not declare"):
             await handler.handle(_make_params(intent_class="QUERY"))
@@ -382,28 +380,8 @@ class TestDescribeHandlerIntentClassValidation(unittest.IsolatedAsyncioTestCase)
 
 
 class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
-    async def test_mandatory_filter_marks_predicate_required(self) -> None:
-        resource = _make_resource()
-        policy = ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[
-                MandatoryFilterRule(
-                    type="MANDATORY_FILTER",
-                    field_id="id",
-                    op="EQ",
-                    value="required_value",
-                ),
-            ],
-        )
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_params(intent_class="QUERY"))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        predicates = data["usageContract"]["capabilities"]["predicates"]
-        id_pred = next(p for p in predicates if p["fieldId"] == "id")
-        name_pred = next(p for p in predicates if p["fieldId"] == "name")
-        self.assertEqual(id_pred["usage"], "REQUIRED")
-        self.assertEqual(name_pred["usage"], "OPTIONAL")
+    # NOTE: Policy enforcement is disabled until the policy spec is finalized.
+    # All predicates are OPTIONAL regardless of policy rules.
 
     async def test_operational_rule_does_not_affect_predicates(self) -> None:
         resource = _make_resource()

@@ -230,9 +230,9 @@ class DescribeHandler(Handler):
         self,
         resource_id: str,
         intent_class: IntentClass,
-        resource_intent_classes: list[IntentClass] | None,
+        resource_intent_classes: list[IntentClass],
     ) -> None:
-        if resource_intent_classes is None:
+        if not resource_intent_classes:
             raise InvalidParamsError(
                 f"Resource {resource_id!r} does not declare any supported intent classes. "
                 "Use adp.discover to find resources supporting your intent class."
@@ -241,9 +241,9 @@ class DescribeHandler(Handler):
             intent_class not in resource_intent_classes
             and IntentClass.WILDCARD not in resource_intent_classes
         ):
-            supported = ", ".join(str(ic) for ic in resource_intent_classes)
+            supported = ", ".join(ic.value for ic in resource_intent_classes)
             raise InvalidParamsError(
-                f"Resource {resource_id!r} does not support intent class {intent_class!r}. "
+                f"Resource {resource_id!r} does not support intent class {intent_class.value}. "
                 f"Supported intent classes: {supported}. "
                 "Use adp.discover to find resources supporting your intent class."
             )
@@ -261,6 +261,8 @@ class DescribeHandler(Handler):
         resource_id: str,
     ) -> Capabilities:
         if _is_read_intent(intent_class):
-            mandatory_field_ids = _get_mandatory_field_ids(self._manifest_index, resource_id)
-            return _build_read_capabilities(fields, mandatory_field_ids)
+            # TODO: enforce policy rules once the policy spec is finalized.
+            # Use _get_mandatory_field_ids(self._manifest_index, resource_id) to
+            # derive REQUIRED predicates from MandatoryFilterRule entries.
+            return _build_read_capabilities(fields, mandatory_field_ids=set())
         return _build_write_capabilities(fields)
