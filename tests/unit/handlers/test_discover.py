@@ -23,15 +23,23 @@ def _make_resource(
     semantic_description: str | None = None,
     tags: list[str] | None = None,
     version: int = 1,
+    sources: list[dict[str, Any]] | None = None,
 ) -> CuratedResource:
     return CuratedResource(
         resource_id=resource_id,
-        intent_classes=intent_classes,
+        # CuratedResource.intent_classes is required. For tests that conceptually
+        # represent "no intent classes", we pass an empty list rather than None
+        # to reflect the spec semantics (empty list = resource disabled).
+        intent_classes=intent_classes or [],
         description=description,
         semantic_description=semantic_description,
         tags=tags,
         version=version,
         backend_id="test_backend",
+        # CuratedResource.sources is required and must contain at least one SourceDefinition.
+        # For Discover handler tests we only care about resource metadata, so we use a
+        # minimal placeholder source by default.
+        sources=sources or [{"source": "dummy"}],
     )
 
 
@@ -267,9 +275,8 @@ class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(data["resources"]), 5)
 
     async def test_resource_without_intent_classes_not_matched(self) -> None:
-        resources = [
-            _make_resource(resource_id="test:no_intents", intent_classes=None),
-        ]
+        # A resource with an empty intentClasses array should not match any intent filter.
+        resources = [_make_resource(resource_id="test:no_intents", intent_classes=[])]
         handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources))
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
