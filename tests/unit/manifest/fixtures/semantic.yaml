@@ -15,7 +15,7 @@ resources:
   # RDBMS Resource - Full definition with single source
   - resourceId: "com.acme.finance:bank_failures"
     intentClasses: ["QUERY"]
-    version: 1  # Resource version number (starts from 1; default 1 if omitted)
+    version: 1  # Resource version number (starts from 1, required for every resource)
     description: "Bank failure records from FDIC"
     semanticDescription: "Historical records of bank failures including FDIC certificate numbers, closing dates, and failure summaries."
     tags:

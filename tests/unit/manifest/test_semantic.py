@@ -2,6 +2,8 @@
 
 import unittest
 
+from pydantic import ValidationError
+
 from adp_hypervisor.manifest.semantic import (
     CuratedResource,
     SemanticManifest,
@@ -166,3 +168,8 @@ class TestSemanticManifest(unittest.TestCase):
         self.assertEqual(len(manifest.resources), 2)
         self.assertEqual(manifest.resources[0].version, 1)
         self.assertEqual(manifest.resources[1].version, 2)
+
+    def test_manifest_requires_resources(self) -> None:
+        """SemanticManifest.resources is required; omitting it should fail validation."""
+        with self.assertRaises(ValidationError):
+            SemanticManifest.model_validate({"version": "1.0.0"})

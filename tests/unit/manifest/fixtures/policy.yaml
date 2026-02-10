@@ -5,15 +5,7 @@
 # in policy rules (MandatoryFilterRule and defaultOrderBy) is optional and
 # can be omitted for single-source resources. The field is reserved for
 # future support of multiple sources per resource.
-
-# ============================================================================
-# Bootstrap Mode - No Enforcements
-# ============================================================================
-# Uncomment the following for bootstrap mode (no restrictions):
-# version: "1.0.0"
-# # No policies array needed - no special enforcements will be applied
-# # All resources are accessible without restrictions
-
+#
 # ============================================================================
 # Full Manual Definition with Policy Rules
 # ============================================================================
