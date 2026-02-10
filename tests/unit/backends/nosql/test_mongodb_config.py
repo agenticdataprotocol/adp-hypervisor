@@ -2,9 +2,12 @@
 
 import unittest
 
-from adp_hypervisor.manifest.physical import BackendDefinition, BackendType, NOSQLBackendConfig
+from adp_hypervisor.manifest.physical import (
+    BackendDefinition,
+    BackendType,
+    NOSQLBackendConfig,
+)
 from backends.nosql.mongodb import MongoDBBackend
-
 
 # =============================================================================
 # Configuration Tests
