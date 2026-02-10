@@ -172,7 +172,7 @@ class TestManifestSchemaConsistency(unittest.TestCase):
         Root manifest models should expose a version field and validate simple examples.
         """
         PhysicalManifest(version="1.0.0", backends=[])
-        SemanticManifest(version="1.0.0", default_domain="com.example", resources=None)
+        SemanticManifest(version="1.0.0", resources=[])
         PolicyManifest(version="1.0.0", policies=None)
 
     # -------------------------------------------------------------------------

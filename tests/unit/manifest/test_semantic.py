@@ -2,6 +2,8 @@
 
 import unittest
 
+from pydantic import ValidationError
+
 from adp_hypervisor.manifest.semantic import (
     CuratedResource,
     SemanticManifest,
@@ -71,20 +73,14 @@ class TestCuratedResource(unittest.TestCase):
         self.assertEqual(len(resource.sources), 1)
         self.assertEqual(resource.sources[0].source, "v_failures_consolidated")
 
-    def test_bootstrap_resource_minimal(self) -> None:
-        """Bootstrap mode: only backendId is required."""
-        resource = CuratedResource.model_validate({"backendId": "db1"})
-        self.assertEqual(resource.backend_id, "db1")
-        self.assertIsNone(resource.resource_id)
-        self.assertIsNone(resource.sources)
-        self.assertIsNone(resource.intent_classes)
-
     def test_wildcard_intent_class(self) -> None:
         resource = CuratedResource.model_validate(
             {
                 "resourceId": "com.acme:universal",
                 "intentClasses": ["*"],
+                "version": 1,
                 "backendId": "db1",
+                "sources": [{"source": "tbl"}],
             }
         )
         self.assertEqual(resource.intent_classes, [IntentClass.WILDCARD])
@@ -94,7 +90,10 @@ class TestCuratedResource(unittest.TestCase):
         resource = CuratedResource.model_validate(
             {
                 "resourceId": "com.acme:test",
+                "intentClasses": ["QUERY"],
+                "version": 1,
                 "backendId": "db1",
+                "sources": [{"source": "events"}],
                 "tags": ["TAG1", "TAG2"],
                 "semanticDescription": "A test resource",
             }
@@ -103,7 +102,13 @@ class TestCuratedResource(unittest.TestCase):
         self.assertEqual(resource.semantic_description, "A test resource")
 
     def test_serialization_camel_case(self) -> None:
-        resource = CuratedResource(backend_id="db1", version=1)
+        resource = CuratedResource(
+            resource_id="com.acme:test",
+            intent_classes=[IntentClass.QUERY],
+            version=1,
+            backend_id="db1",
+            sources=[SourceDefinition(source="events")],
+        )
         dumped = resource.model_dump(by_alias=True, exclude_none=True)
         self.assertIn("backendId", dumped)
         self.assertEqual(dumped["backendId"], "db1")
@@ -119,11 +124,11 @@ class TestSemanticManifest(unittest.TestCase):
         manifest = SemanticManifest.model_validate(
             {
                 "version": "1.0.0",
-                "defaultDomain": "com.acme.finance",
                 "resources": [
                     {
                         "resourceId": "com.acme.finance:bank_failures",
                         "intentClasses": ["QUERY"],
+                        "version": 1,
                         "backendId": "finance_sql",
                         "sources": [
                             {
@@ -136,44 +141,35 @@ class TestSemanticManifest(unittest.TestCase):
             }
         )
         self.assertEqual(manifest.version, "1.0.0")
-        self.assertEqual(manifest.default_domain, "com.acme.finance")
-        self.assertIsNotNone(manifest.resources)
-        self.assertIsNotNone(manifest.resources)
         self.assertEqual(len(manifest.resources), 1)
-
-    def test_bootstrap_manifest_no_resources(self) -> None:
-        """Bootstrap mode: no resources array."""
-        manifest = SemanticManifest.model_validate(
-            {
-                "version": "1.0.0",
-                "defaultDomain": "com.acme.finance",
-            }
-        )
-        self.assertIsNone(manifest.resources)
 
     def test_multi_version_resources(self) -> None:
         manifest = SemanticManifest.model_validate(
             {
                 "version": "1.0.0",
-                "defaultDomain": "com.acme",
                 "resources": [
                     {
                         "resourceId": "com.acme:events",
                         "version": 1,
+                        "intentClasses": ["QUERY"],
                         "backendId": "db",
                         "sources": [{"source": "events"}],
                     },
                     {
                         "resourceId": "com.acme:events",
                         "version": 2,
+                        "intentClasses": ["QUERY"],
                         "backendId": "db",
                         "sources": [{"source": "events"}],
                     },
                 ],
             }
         )
-        self.assertIsNotNone(manifest.resources)
-        self.assertIsNotNone(manifest.resources)
         self.assertEqual(len(manifest.resources), 2)
         self.assertEqual(manifest.resources[0].version, 1)
         self.assertEqual(manifest.resources[1].version, 2)
+
+    def test_manifest_requires_resources(self) -> None:
+        """SemanticManifest.resources is required; omitting it should fail validation."""
+        with self.assertRaises(ValidationError):
+            SemanticManifest.model_validate({"version": "1.0.0"})

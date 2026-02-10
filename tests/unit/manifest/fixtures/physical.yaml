@@ -1,7 +1,9 @@
-# Test fixture: Physical Manifest
+# Physical Manifest Example
+# Defines the physical backends (data sources) for ADP curation
 version: "1.0.0"
 
 backends:
+  # RDBMS Backend - PostgreSQL database
   - id: "finance_sql"
     type: "RDBMS"
     config:
@@ -12,6 +14,7 @@ backends:
       type: "env"
       key: "DB_PASSWORD"
 
+  # Vector Database Backend - Pinecone
   - id: "report_vectors"
     type: "VECTOR"
     config:
@@ -24,13 +27,19 @@ backends:
       manager: "AWS_SECRETS_MANAGER"
       key: "production/pinecone-api-key"
 
+  # S3 Object Storage Backend
   - id: "raw_storage"
     type: "S3"
     config:
       type: "S3"
       uri: "s3://acme-finance-datalake/"
       region: "us-east-1"
+    credentials:
+      type: "secret"
+      manager: "AWS_SECRETS_MANAGER"
+      key: "production/s3-credentials"
 
+  # NoSQL Backend - MongoDB
   - id: "analytics_nosql"
     type: "NOSQL"
     config:
@@ -40,6 +49,7 @@ backends:
       type: "env"
       key: "MONGO_PASSWORD"
 
+  # Graph Database Backend - Neo4j
   - id: "graph_db"
     type: "GRAPH"
     config:

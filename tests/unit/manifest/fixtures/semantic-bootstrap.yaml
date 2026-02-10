@@ -1,4 +1,0 @@
-# Test fixture: Semantic Manifest - Bootstrap Mode
-version: "1.0.0"
-defaultDomain: "com.acme.finance"
-# No resources - bootstrap mode

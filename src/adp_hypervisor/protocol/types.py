@@ -424,15 +424,17 @@ class DiscoverRequest(ADPModel):
 class Resource(ADPModel):
     """Base resource information shared between protocol responses and curation manifests."""
 
-    resource_id: ResourceId | None = PydanticField(
-        default=None,
+    resource_id: ResourceId = PydanticField(
+        ...,
         description="The unique domain-qualified identifier for this resource",
     )
-    version: int | None = PydanticField(
-        default=None, description="The version number of this resource's schema"
+    version: int = PydanticField(
+        ...,
+        description="The version number of this resource's schema",
     )
-    intent_classes: list[IntentClass] | None = PydanticField(
-        default=None, description="The intent classes this resource supports"
+    intent_classes: list[IntentClass] = PydanticField(
+        ...,
+        description="The intent classes this resource supports",
     )
     description: str | None = PydanticField(
         default=None, description="A brief description of the resource"
@@ -487,7 +489,11 @@ class Field(ADPModel):
     """Definition of a single field in a resource."""
 
     field_id: str = PydanticField(..., description="The field identifier")
-    type: FieldType = PydanticField(..., description="The data type of this field")
+    type: FieldType | None = PydanticField(
+        default=None,
+        description="The data type of this field. When omitted, the field is treated as having "
+        "an opaque or implementation-defined payload.",
+    )
     description: str | None = PydanticField(
         default=None, description="Human-readable description of the field"
     )

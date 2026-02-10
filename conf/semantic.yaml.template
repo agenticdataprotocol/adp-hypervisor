@@ -1,19 +1,28 @@
 # Semantic Manifest Template
-# Maps physical data sources to ADP resources
+# Maps physical data sources (from physical.yaml) to ADP resources and
+# defines the "Agent's View" of fields.
 #
 # Copy this file as semantic.yaml and customize for your environment.
+#
+# IMPORTANT:
+# - You MUST define resources explicitly.
+# - Each resource currently supports a single source; use multiple resources
+#   if you need to expose multiple tables/collections.
 
 version: "1.0.0"
-defaultDomain: "com.default"
 
+# List of resource definitions. Each entry binds a resourceId to one backend
+# and (currently) one source.
+#
 # resources:
+#   # Example: relational table as a QUERY-only resource
 #   - resourceId: "com.example:my_table"
-#     intentClasses: ["QUERY"]
+#     intentClasses: ["QUERY"]  # e.g. ["QUERY"], ["LOOKUP"], ["INGEST"], ["REVISE"], or ["*"]
 #     version: 1
 #     description: "My table resource"
-#     backendId: "my_database"
+#     backendId: "my_database"  # must match a backend id in physical.yaml
 #     sources:
-#       - source: "my_table"
+#       - source: "my_table"  # table/view/collection name, or prefix for object storage
 #         fields:
 #           - fieldId: "id"
 #             type: "STRING"

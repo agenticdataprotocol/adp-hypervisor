@@ -56,12 +56,15 @@ _ALL_CONCRETE_INTENT_CLASSES = [
 ]
 
 
-def _expand_intent_classes(
-    intent_classes: list[IntentClass] | None,
-) -> list[IntentClass] | None:
-    """Expand WILDCARD to all concrete intent classes."""
-    if intent_classes is None:
-        return None
+def _expand_intent_classes(intent_classes: list[IntentClass] | None) -> list[IntentClass]:
+    """Normalize and expand intent classes for protocol Resource.
+
+    - None or []       -> [] (resource disabled / no intents)
+    - Includes WILDCARD -> all concrete intent classes
+    - Otherwise        -> original list
+    """
+    if not intent_classes:
+        return []
     if IntentClass.WILDCARD in intent_classes:
         return list(_ALL_CONCRETE_INTENT_CLASSES)
     return intent_classes

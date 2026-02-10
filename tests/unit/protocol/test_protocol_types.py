@@ -402,8 +402,18 @@ class TestDiscoverTypes(unittest.TestCase):
         result = DiscoverResult.model_validate(
             {
                 "resources": [
-                    {"resourceId": "res1", "description": "Resource 1"},
-                    {"resourceId": "res2", "description": "Resource 2"},
+                    {
+                        "resourceId": "res1",
+                        "version": 1,
+                        "intentClasses": ["QUERY"],
+                        "description": "Resource 1",
+                    },
+                    {
+                        "resourceId": "res2",
+                        "version": 2,
+                        "intentClasses": ["LOOKUP"],
+                        "description": "Resource 2",
+                    },
                 ],
                 "nextCursor": "page2",
             }
@@ -445,6 +455,21 @@ class TestDescribeTypes(unittest.TestCase):
         self.assertEqual(field.samples, ["John", "Jane"])
         self.assertFalse(field.is_masked)
         self.assertTrue(field.is_searchable)
+
+    def test_field_without_type_is_allowed(self) -> None:
+        """Field.type is optional; when omitted it should not appear in dumps."""
+        field = Field.model_validate({"fieldId": "payload"})
+        self.assertEqual(field.field_id, "payload")
+        self.assertIsNone(field.type)
+
+        # By default, dumps should include type=None (since it is part of the model).
+        dumped = field.model_dump(by_alias=True)
+        self.assertIn("type", dumped)
+        self.assertIsNone(dumped["type"])
+
+        # When exclude_none is used, the type field should be omitted entirely.
+        dumped_excluding_none = field.model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(dumped_excluding_none, {"fieldId": "payload"})
 
     def test_predicate_capability(self) -> None:
         cap = PredicateCapability.model_validate(
@@ -816,7 +841,11 @@ class TestModelSerialization(unittest.TestCase):
         result = DiscoverResult.model_validate(
             {
                 "resources": [
-                    {"resourceId": "com.acme:users", "intentClasses": ["QUERY"]},
+                    {
+                        "resourceId": "com.acme:users",
+                        "version": 1,
+                        "intentClasses": ["QUERY"],
+                    },
                 ],
                 "nextCursor": "page2",
             }

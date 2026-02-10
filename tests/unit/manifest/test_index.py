@@ -69,16 +69,17 @@ def _make_sample_manifests() -> tuple[PhysicalManifest, SemanticManifest, Policy
     semantic = SemanticManifest.model_validate(
         {
             "version": "1.0.0",
-            "defaultDomain": "com.acme",
             "resources": [
                 {
                     "resourceId": "com.acme:events",
+                    "intentClasses": ["QUERY"],
                     "version": 1,
                     "backendId": "db1",
                     "sources": [{"source": "events_v1"}],
                 },
                 {
                     "resourceId": "com.acme:events",
+                    "intentClasses": ["QUERY"],
                     "version": 2,
                     "backendId": "db1",
                     "sources": [{"source": "events_v2"}],
@@ -188,6 +189,7 @@ class TestManifestIndexRefresh(unittest.TestCase):
                     CuratedResource.model_validate(
                         {
                             "resourceId": "com.acme:extra",
+                            "intentClasses": ["QUERY"],
                             "backendId": "db2",
                             "version": 1,
                             "sources": [{"source": "extra"}],
