@@ -5,6 +5,7 @@ from adp_hypervisor.handlers.describe import DescribeHandler
 from adp_hypervisor.handlers.discover import DiscoverHandler
 from adp_hypervisor.handlers.initialize import InitializeHandler
 from adp_hypervisor.handlers.ping import PingHandler
+from adp_hypervisor.handlers.validate import ValidateHandler
 
 __all__ = [
     # Base
@@ -14,4 +15,5 @@ __all__ = [
     "DiscoverHandler",
     "InitializeHandler",
     "PingHandler",
+    "ValidateHandler",
 ]
