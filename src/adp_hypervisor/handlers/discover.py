@@ -8,6 +8,7 @@ available resources with optional filtering and cursor-based pagination.
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 from fnmatch import fnmatch
 from typing import TYPE_CHECKING, Any
@@ -39,9 +40,12 @@ def _encode_cursor(offset: int) -> str:
 
 def _decode_cursor(cursor: str) -> int:
     try:
-        return int(base64.urlsafe_b64decode(cursor.encode()).decode())
-    except (ValueError, Exception) as e:
+        offset = int(base64.urlsafe_b64decode(cursor.encode()).decode())
+    except (binascii.Error, UnicodeDecodeError, ValueError) as e:
         raise InvalidParamsError(f"Invalid cursor: {cursor!r}") from e
+    if offset < 0:
+        raise InvalidParamsError(f"Invalid cursor: {cursor!r}")
+    return offset
 
 
 _ALL_CONCRETE_INTENT_CLASSES = [
@@ -140,7 +144,12 @@ class DiscoverHandler(Handler):
         Args:
             manifest_index: The manifest index to read resources from.
             page_size: Maximum number of resources per page.
+
+        Raises:
+            ValueError: If ``page_size`` is not a positive integer.
         """
+        if page_size <= 0:
+            raise ValueError("page_size must be a positive integer")
         self._manifest_index = manifest_index
         self._page_size = page_size
 
@@ -166,6 +175,8 @@ class DiscoverHandler(Handler):
         offset = 0
         if request.cursor is not None:
             offset = _decode_cursor(request.cursor)
+            if offset > len(filtered):
+                raise InvalidParamsError(f"Invalid cursor: {request.cursor!r}")
 
         page = filtered[offset : offset + self._page_size]
 

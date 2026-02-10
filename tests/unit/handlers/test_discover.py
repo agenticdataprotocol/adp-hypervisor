@@ -117,6 +117,11 @@ class TestCursorEncoding(unittest.TestCase):
         with self.assertRaisesRegex(InvalidParamsError, "Invalid cursor"):
             _decode_cursor(bad)
 
+    def test_negative_cursor_raises(self) -> None:
+        negative = base64.urlsafe_b64encode(b"-1").decode()
+        with self.assertRaisesRegex(InvalidParamsError, "Invalid cursor"):
+            _decode_cursor(negative)
+
 
 # =============================================================================
 # Method Name Test
