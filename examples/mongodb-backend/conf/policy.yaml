@@ -1,0 +1,10 @@
+version: "1.0.0"
+
+policies:
+  - resourceId: "demo:orders"
+    rules:
+      - type: "OPERATIONAL"
+        enforceLimit: 50
+        defaultOrderBy:
+          fieldId: "ordered_at"
+          direction: "DESC"

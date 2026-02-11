@@ -44,6 +44,11 @@ def _create_backend(definition: BackendDefinition) -> Backend | None:
 
         return PostgresBackend(definition=definition)
 
+    if definition.type == BackendType.NOSQL:
+        from backends.nosql.mongodb import MongoDBBackend
+
+        return MongoDBBackend(definition=definition)
+
     return None
 
 

@@ -24,6 +24,7 @@ uv sync
 | Example                               | Backend    | Description                                                                    |
 |:--------------------------------------|:-----------|:-------------------------------------------------------------------------------|
 | [postgres-backend](postgres-backend/) | PostgreSQL | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
+| [mongodb-backend](mongodb-backend/)   | MongoDB    | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
 
 ## General Workflow
 
