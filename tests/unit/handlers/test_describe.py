@@ -45,7 +45,7 @@ def _make_resource(
         version=version,
         description="Test resource",
         backend_id="test_backend",
-        sources=[SourceDefinition(source="test_table", fields=fields)],
+        source_definition=SourceDefinition(source="test_table", fields=fields),
     )
 
 
@@ -431,13 +431,13 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
 
 
 class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
-    async def test_resource_with_no_sources_returns_empty_fields(self) -> None:
+    async def test_resource_with_empty_fields_returns_empty_fields(self) -> None:
         resource = CuratedResource(
             resource_id="com.acme:empty",
             intent_classes=["QUERY"],
             version=1,
             backend_id="test",
-            sources=[],
+            source_definition=SourceDefinition(source="empty", fields=[]),
         )
         handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
@@ -453,7 +453,7 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
             intent_classes=["QUERY"],
             version=1,
             backend_id="test",
-            sources=[SourceDefinition(source="empty_table", fields=None)],
+            source_definition=SourceDefinition(source="empty_table", fields=None),
         )
         handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(

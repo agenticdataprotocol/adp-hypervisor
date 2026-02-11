@@ -12,7 +12,7 @@ from adp_hypervisor.handlers.discover import (
     _encode_cursor,
 )
 from adp_hypervisor.manifest.index import ManifestIndex
-from adp_hypervisor.manifest.semantic import CuratedResource
+from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
 from adp_hypervisor.protocol.errors import InvalidParamsError
 
 
@@ -23,7 +23,7 @@ def _make_resource(
     semantic_description: str | None = None,
     tags: list[str] | None = None,
     version: int = 1,
-    sources: list[dict[str, Any]] | None = None,
+    source_definition: SourceDefinition | dict[str, Any] | None = None,
 ) -> CuratedResource:
     return CuratedResource(
         resource_id=resource_id,
@@ -36,10 +36,9 @@ def _make_resource(
         tags=tags,
         version=version,
         backend_id="test_backend",
-        # CuratedResource.sources is required and must contain at least one SourceDefinition.
-        # For Discover handler tests we only care about resource metadata, so we use a
-        # minimal placeholder source by default.
-        sources=sources or [{"source": "dummy"}],
+        # CuratedResource.source_definition is required. For Discover handler tests
+        # we only care about resource metadata, so we use a minimal placeholder.
+        source_definition=source_definition or SourceDefinition(source="dummy"),
     )
 
 
@@ -176,7 +175,7 @@ class TestDiscoverHandlerNoFilters(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         for resource in data["resources"]:
             self.assertNotIn("backendId", resource)
-            self.assertNotIn("sources", resource)
+            self.assertNotIn("sourceDefinition", resource)
 
     async def test_wildcard_intent_classes_expanded(self) -> None:
         resources = [

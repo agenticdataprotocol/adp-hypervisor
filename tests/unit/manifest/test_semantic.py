@@ -54,24 +54,20 @@ class TestCuratedResource(unittest.TestCase):
                 "semanticDescription": "Historical records of bank failures.",
                 "tags": ["FINANCE"],
                 "backendId": "finance_sql",
-                "sources": [
-                    {
-                        "source": "v_failures_consolidated",
-                        "fields": [
-                            {"fieldId": "bank_id", "type": "STRING"},
-                        ],
-                    }
-                ],
+                "sourceDefinition": {
+                    "source": "v_failures_consolidated",
+                    "fields": [
+                        {"fieldId": "bank_id", "type": "STRING"},
+                    ],
+                },
             }
         )
         self.assertEqual(resource.resource_id, "com.acme:bank_failures")
         self.assertEqual(resource.intent_classes, [IntentClass.QUERY])
         self.assertEqual(resource.version, 1)
         self.assertEqual(resource.backend_id, "finance_sql")
-        self.assertIsNotNone(resource.sources)
-        self.assertIsNotNone(resource.sources)
-        self.assertEqual(len(resource.sources), 1)
-        self.assertEqual(resource.sources[0].source, "v_failures_consolidated")
+        self.assertIsNotNone(resource.source_definition)
+        self.assertEqual(resource.source_definition.source, "v_failures_consolidated")
 
     def test_wildcard_intent_class(self) -> None:
         resource = CuratedResource.model_validate(
@@ -80,7 +76,7 @@ class TestCuratedResource(unittest.TestCase):
                 "intentClasses": ["*"],
                 "version": 1,
                 "backendId": "db1",
-                "sources": [{"source": "tbl"}],
+                "sourceDefinition": {"source": "tbl"},
             }
         )
         self.assertEqual(resource.intent_classes, [IntentClass.WILDCARD])
@@ -93,7 +89,7 @@ class TestCuratedResource(unittest.TestCase):
                 "intentClasses": ["QUERY"],
                 "version": 1,
                 "backendId": "db1",
-                "sources": [{"source": "events"}],
+                "sourceDefinition": {"source": "events"},
                 "tags": ["TAG1", "TAG2"],
                 "semanticDescription": "A test resource",
             }
@@ -107,7 +103,7 @@ class TestCuratedResource(unittest.TestCase):
             intent_classes=[IntentClass.QUERY],
             version=1,
             backend_id="db1",
-            sources=[SourceDefinition(source="events")],
+            source_definition=SourceDefinition(source="events"),
         )
         dumped = resource.model_dump(by_alias=True, exclude_none=True)
         self.assertIn("backendId", dumped)
@@ -130,12 +126,10 @@ class TestSemanticManifest(unittest.TestCase):
                         "intentClasses": ["QUERY"],
                         "version": 1,
                         "backendId": "finance_sql",
-                        "sources": [
-                            {
-                                "source": "bank_failures",
-                                "fields": [{"fieldId": "id", "type": "STRING"}],
-                            }
-                        ],
+                        "sourceDefinition": {
+                            "source": "bank_failures",
+                            "fields": [{"fieldId": "id", "type": "STRING"}],
+                        },
                     }
                 ],
             }
@@ -153,14 +147,14 @@ class TestSemanticManifest(unittest.TestCase):
                         "version": 1,
                         "intentClasses": ["QUERY"],
                         "backendId": "db",
-                        "sources": [{"source": "events"}],
+                        "sourceDefinition": {"source": "events"},
                     },
                     {
                         "resourceId": "com.acme:events",
                         "version": 2,
                         "intentClasses": ["QUERY"],
                         "backendId": "db",
-                        "sources": [{"source": "events"}],
+                        "sourceDefinition": {"source": "events"},
                     },
                 ],
             }
