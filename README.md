@@ -133,6 +133,7 @@ uv run mypy src/
 adp-hypervisor/
 ├── pyproject.toml              # Project configuration
 ├── conf/                       # Manifest templates
+├── examples/                   # End-to-end usage examples
 ├── src/adp_hypervisor/         # Main hypervisor package
 │   ├── server.py               # ADPServer main class
 │   ├── __main__.py             # CLI entry point

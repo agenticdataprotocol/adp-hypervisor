@@ -1,0 +1,12 @@
+version: "1.0.0"
+
+backends:
+  - id: "pg_demo"
+    type: "RDBMS"
+    config:
+      type: "RDBMS"
+      uri: "postgresql://adp_user@localhost:5432/adp_demo"
+      schema: "public"
+    credentials:
+      type: "env"
+      key: "PG_PASSWORD"
