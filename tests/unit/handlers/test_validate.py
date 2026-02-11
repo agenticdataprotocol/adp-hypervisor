@@ -53,7 +53,7 @@ def _make_resource(
         version=1,
         description="Test resource",
         backend_id="test_backend",
-        sources=[SourceDefinition(source="test_table", fields=fields)],
+        source_definition=SourceDefinition(source="test_table", fields=fields),
     )
 
 
@@ -74,7 +74,10 @@ def _make_query_params(
     logic_op: str = "AND",
 ) -> dict[str, Any]:
     if predicates is None:
-        predicates = [{"fieldId": "name", "op": "EQ", "value": "test"}]
+        predicates = [
+            {"fieldId": "name", "op": "EQ", "value": "test"},
+            {"fieldId": "amount", "op": "GT", "value": 0},
+        ]
     intent: dict[str, Any] = {
         "intentClass": "QUERY",
         "predicates": {"op": logic_op, "predicates": predicates},
@@ -121,7 +124,10 @@ def _make_revise_params(
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if predicates is None:
-        predicates = [{"fieldId": "id", "op": "EQ", "value": "123"}]
+        predicates = [
+            {"fieldId": "id", "op": "EQ", "value": "123"},
+            {"fieldId": "name", "op": "EQ", "value": "old"},
+        ]
     if payload is None:
         payload = {"name": "updated"}
     return {
@@ -297,15 +303,20 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "nonexistent", "op": "EQ", "value": "x"}])
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "nonexistent", "op": "EQ", "value": "x"},
+                    {"fieldId": "name", "op": "EQ", "value": "ok"},
+                ]
+            )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
-        self.assertEqual(len(data["issues"]), 1)
-        self.assertEqual(data["issues"][0]["code"], "FIELD_NOT_FOUND")
-        self.assertEqual(data["issues"][0]["field"], "nonexistent")
-        self.assertEqual(data["issues"][0]["severity"], "BLOCKING")
+        fnf_issues = [i for i in data["issues"] if i["code"] == "FIELD_NOT_FOUND"]
+        self.assertEqual(len(fnf_issues), 1)
+        self.assertEqual(fnf_issues[0]["field"], "nonexistent")
+        self.assertEqual(fnf_issues[0]["severity"], "BLOCKING")
 
     async def test_lookup_unknown_key_field(self) -> None:
         resource = _make_resource()
@@ -334,7 +345,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
             _make_revise_params(
-                predicates=[{"fieldId": "nonexistent", "op": "EQ", "value": "x"}],
+                predicates=[
+                    {"fieldId": "nonexistent", "op": "EQ", "value": "x"},
+                    {"fieldId": "id", "op": "EQ", "value": "1"},
+                ],
                 payload={"name": "updated"},
             )
         )
@@ -375,13 +389,19 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "active", "op": "LIKE", "value": "true"}])
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "active", "op": "LIKE", "value": "true"},
+                    {"fieldId": "name", "op": "EQ", "value": "ok"},
+                ]
+            )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
-        self.assertEqual(data["issues"][0]["code"], "INVALID_OPERATOR")
-        self.assertEqual(data["issues"][0]["field"], "active")
+        op_issues = [i for i in data["issues"] if i["code"] == "INVALID_OPERATOR"]
+        self.assertEqual(len(op_issues), 1)
+        self.assertEqual(op_issues[0]["field"], "active")
 
     async def test_similar_on_string_field(self) -> None:
         resource = _make_resource()
@@ -393,20 +413,27 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
                         "fieldId": "name",
                         "op": "SIMILAR",
                         "value": {"text": "search text"},
-                    }
+                    },
+                    {"fieldId": "amount", "op": "GT", "value": 0},
                 ]
             )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
-        self.assertEqual(data["issues"][0]["code"], "INVALID_OPERATOR")
+        op_issues = [i for i in data["issues"] if i["code"] == "INVALID_OPERATOR"]
+        self.assertEqual(len(op_issues), 1)
 
     async def test_gt_on_boolean_field(self) -> None:
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "active", "op": "GT", "value": True}])
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "active", "op": "GT", "value": True},
+                    {"fieldId": "name", "op": "EQ", "value": "ok"},
+                ]
+            )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -418,7 +445,12 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "amount", "op": "GT", "value": 100}])
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "amount", "op": "GT", "value": 100},
+                    {"fieldId": "name", "op": "EQ", "value": "ok"},
+                ]
+            )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -430,13 +462,17 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
             _make_revise_params(
-                predicates=[{"fieldId": "active", "op": "LIKE", "value": "true"}],
+                predicates=[
+                    {"fieldId": "active", "op": "LIKE", "value": "true"},
+                    {"fieldId": "name", "op": "EQ", "value": "ok"},
+                ],
             )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
-        self.assertEqual(data["issues"][0]["code"], "INVALID_OPERATOR")
+        op_issues = [i for i in data["issues"] if i["code"] == "INVALID_OPERATOR"]
+        self.assertEqual(len(op_issues), 1)
 
 
 # =============================================================================
@@ -500,25 +536,29 @@ class TestValidateResourceNotFound(unittest.IsolatedAsyncioTestCase):
 
 
 class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
-    async def test_resource_with_no_sources_empty_fields(self) -> None:
+    async def test_resource_with_no_fields(self) -> None:
         resource = CuratedResource(
             resource_id="com.acme:empty",
             intent_classes=[IntentClass.QUERY],
             version=1,
             backend_id="test",
-            sources=[],
+            source_definition=SourceDefinition(source="empty_table"),
         )
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
             _make_query_params(
                 resource_id="com.acme:empty",
-                predicates=[{"fieldId": "name", "op": "EQ", "value": "test"}],
+                predicates=[
+                    {"fieldId": "name", "op": "EQ", "value": "test"},
+                    {"fieldId": "id", "op": "EQ", "value": "1"},
+                ],
             )
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
-        self.assertEqual(data["issues"][0]["code"], "FIELD_NOT_FOUND")
+        fnf_issues = [i for i in data["issues"] if i["code"] == "FIELD_NOT_FOUND"]
+        self.assertGreaterEqual(len(fnf_issues), 1)
 
     async def test_multiple_issues_collected(self) -> None:
         resource = _make_resource()
@@ -536,3 +576,186 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
         self.assertGreaterEqual(len(data["issues"]), 3)
+
+
+# =============================================================================
+# Logic Operator Arity Validation Tests
+# =============================================================================
+
+
+class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
+    """Validate that PredicateGroup logic operators have correct arity.
+
+    AND/OR require >= 2 operands; NOT requires exactly 1.
+    """
+
+    async def test_and_with_two_predicates_valid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "name", "op": "EQ", "value": "a"},
+                    {"fieldId": "amount", "op": "GT", "value": 1},
+                ],
+                logic_op="AND",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
+
+    async def test_and_with_single_predicate_invalid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
+                logic_op="AND",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
+        self.assertEqual(len(fmt_issues), 1)
+        self.assertIn("AND", fmt_issues[0]["message"])
+
+    async def test_or_with_two_predicates_valid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "name", "op": "EQ", "value": "a"},
+                    {"fieldId": "name", "op": "EQ", "value": "b"},
+                ],
+                logic_op="OR",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+
+    async def test_or_with_single_predicate_invalid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
+                logic_op="OR",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
+        self.assertEqual(len(fmt_issues), 1)
+        self.assertIn("OR", fmt_issues[0]["message"])
+
+    async def test_not_with_single_predicate_valid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
+                logic_op="NOT",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+
+    async def test_not_with_two_predicates_invalid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {"fieldId": "name", "op": "EQ", "value": "a"},
+                    {"fieldId": "amount", "op": "GT", "value": 1},
+                ],
+                logic_op="NOT",
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
+        self.assertEqual(len(fmt_issues), 1)
+        self.assertIn("NOT", fmt_issues[0]["message"])
+
+    async def test_not_wrapping_group_valid(self) -> None:
+        """NOT (A AND B) is valid."""
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        params: dict[str, Any] = {
+            "resourceId": "com.acme:test_resource",
+            "intent": {
+                "intentClass": "QUERY",
+                "predicates": {
+                    "op": "NOT",
+                    "predicates": [
+                        {
+                            "op": "AND",
+                            "predicates": [
+                                {"fieldId": "name", "op": "EQ", "value": "a"},
+                                {"fieldId": "amount", "op": "GT", "value": 1},
+                            ],
+                        }
+                    ],
+                },
+            },
+        }
+        result = await handler.handle(params)
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+
+    async def test_nested_invalid_group_detected(self) -> None:
+        """AND with valid top level but nested NOT with 2 operands is invalid."""
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        params: dict[str, Any] = {
+            "resourceId": "com.acme:test_resource",
+            "intent": {
+                "intentClass": "QUERY",
+                "predicates": {
+                    "op": "AND",
+                    "predicates": [
+                        {"fieldId": "name", "op": "EQ", "value": "a"},
+                        {
+                            "op": "NOT",
+                            "predicates": [
+                                {"fieldId": "amount", "op": "GT", "value": 1},
+                                {"fieldId": "active", "op": "EQ", "value": True},
+                            ],
+                        },
+                    ],
+                },
+            },
+        }
+        result = await handler.handle(params)
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
+        self.assertEqual(len(fmt_issues), 1)
+        self.assertIn("NOT", fmt_issues[0]["message"])
+
+    async def test_revise_logic_operator_validated(self) -> None:
+        """REVISE intent also validates predicate group arity."""
+        resource = _make_resource()
+        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        result = await handler.handle(
+            _make_revise_params(
+                predicates=[{"fieldId": "id", "op": "EQ", "value": "123"}],
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
+        self.assertEqual(len(fmt_issues), 1)
+        self.assertIn("AND", fmt_issues[0]["message"])

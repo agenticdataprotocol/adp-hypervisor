@@ -19,6 +19,7 @@ from adp_hypervisor.protocol.types import (
     FieldType,
     IngestIntent,
     IssueSeverity,
+    LogicOperator,
     LookupIntent,
     Predicate,
     PredicateGroup,
@@ -182,9 +183,9 @@ class ValidateHandler(Handler):
     # ------------------------------------------------------------------
 
     def _extract_fields(self, resource: CuratedResource) -> list[Field]:
-        """Extract fields from the resource's first source definition."""
-        if resource.sources and resource.sources[0].fields:
-            return list(resource.sources[0].fields)
+        """Extract fields from the resource's source definition."""
+        if resource.source_definition.fields:
+            return list(resource.source_definition.fields)
         return []
 
     def _validate_lookup(
@@ -206,6 +207,8 @@ class ValidateHandler(Handler):
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a QUERY intent."""
+        self._validate_predicate_group(intent.predicates, issues)
+
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
             self._check_field_exists(pred.field_id, field_map, issues)
@@ -240,6 +243,8 @@ class ValidateHandler(Handler):
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a REVISE intent."""
+        self._validate_predicate_group(intent.predicates, issues)
+
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
             self._check_field_exists(pred.field_id, field_map, issues)
@@ -299,6 +304,48 @@ class ValidateHandler(Handler):
                     correction_hint=f"Allowed operators: {allowed_str}.",
                 )
             )
+
+    def _validate_predicate_group(
+        self,
+        group: PredicateGroup,
+        issues: list[ValidationIssue],
+    ) -> None:
+        """Validate the logic operator arity of a predicate group recursively.
+
+        Args:
+            group: The predicate group to validate.
+            issues: Accumulator for validation issues.
+        """
+        if group.op == LogicOperator.NOT:
+            if len(group.predicates) != 1:
+                issues.append(
+                    ValidationIssue(
+                        code=ValidationIssueCode.INVALID_FORMAT,
+                        severity=IssueSeverity.BLOCKING,
+                        message=(
+                            f"NOT operator requires exactly 1 operand, "
+                            f"got {len(group.predicates)}"
+                        ),
+                        correction_hint="Use NOT with a single predicate or predicate group.",
+                    )
+                )
+        else:
+            if len(group.predicates) < 2:
+                issues.append(
+                    ValidationIssue(
+                        code=ValidationIssueCode.INVALID_FORMAT,
+                        severity=IssueSeverity.BLOCKING,
+                        message=(
+                            f"{group.op.value} operator requires at least 2 operands, "
+                            f"got {len(group.predicates)}"
+                        ),
+                        correction_hint=(f"Provide at least 2 predicates for {group.op.value}."),
+                    )
+                )
+
+        for item in group.predicates:
+            if isinstance(item, PredicateGroup):
+                self._validate_predicate_group(item, issues)
 
     def _check_projections(
         self,
