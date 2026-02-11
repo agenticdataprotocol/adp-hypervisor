@@ -23,6 +23,7 @@ class BackendType(StrEnum):
     S3 = "S3"
     NOSQL = "NOSQL"
     GRAPH = "GRAPH"
+    POSIX = "POSIX"
 
 
 class CredentialReference(ADPModel):
@@ -91,12 +92,28 @@ class GraphBackendConfig(ADPModel):
     type: Literal["GRAPH"] = PydanticField(default="GRAPH", description="Backend type")
 
 
+class POSIXBackendConfig(ADPModel):
+    """Configuration for POSIX filesystem backend types."""
+
+    type: Literal["POSIX"] = PydanticField(default="POSIX", description="Backend type")
+    root_paths: list[str] = PydanticField(
+        ..., description="Allowed root directory paths for this backend"
+    )
+    allow_symlinks: bool = PydanticField(
+        default=False, description="Whether to allow symlink traversal (NOT RECOMMENDED)"
+    )
+    ignore_patterns: list[str] | None = PydanticField(
+        default=None, description="Gitignore-style glob patterns to exclude"
+    )
+
+
 BackendConfig = Annotated[
     RDBMSBackendConfig
     | VectorBackendConfig
     | S3BackendConfig
     | NOSQLBackendConfig
-    | GraphBackendConfig,
+    | GraphBackendConfig
+    | POSIXBackendConfig,
     PydanticField(discriminator="type"),
 ]
 """Backend-specific configuration, discriminated by type."""
