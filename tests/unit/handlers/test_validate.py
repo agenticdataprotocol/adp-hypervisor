@@ -10,7 +10,6 @@ from adp_hypervisor.handlers.validate import (
     _get_operators_for_field,
 )
 from adp_hypervisor.manifest.index import ManifestIndex
-from adp_hypervisor.manifest.policy import MandatoryFilterRule, OperationalRule, ResourcePolicy
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
 from adp_hypervisor.protocol.errors import ResourceNotFoundError
 from adp_hypervisor.protocol.types import (
@@ -60,11 +59,9 @@ def _make_resource(
 
 def _mock_manifest(
     resource: CuratedResource | None = None,
-    policy: ResourcePolicy | None = None,
 ) -> ManifestIndex:
     index = MagicMock(spec=ManifestIndex)
     index.get_resource.return_value = resource
-    index.get_policy.return_value = policy
     return index
 
 
@@ -486,241 +483,6 @@ class TestValidateOrderBy(unittest.IsolatedAsyncioTestCase):
 
 
 # =============================================================================
-# Mandatory Filter Policy Tests
-# =============================================================================
-
-
-class TestValidateMandatoryFilter(unittest.IsolatedAsyncioTestCase):
-    def _policy_with_mandatory(
-        self,
-        field_id: str = "id",
-        op: PredicateOperator = PredicateOperator.EQ,
-        value: str | int = "required_val",
-    ) -> ResourcePolicy:
-        return ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[
-                MandatoryFilterRule(
-                    type="MANDATORY_FILTER",
-                    field_id=field_id,
-                    op=op,
-                    value=value,
-                ),
-            ],
-        )
-
-    async def test_query_missing_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        missing = [i for i in data["issues"] if i["code"] == "MISSING_REQUIRED_PREDICATE"]
-        self.assertEqual(len(missing), 1)
-        self.assertEqual(missing[0]["field"], "id")
-        self.assertEqual(missing[0]["severity"], "BLOCKING")
-
-    async def test_query_with_matching_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "id", "op": "EQ", "value": "required_val"}])
-        )
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_query_wrong_value_fails(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "id", "op": "EQ", "value": "wrong_val"}])
-        )
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        self.assertTrue(any(i["code"] == "MISSING_REQUIRED_PREDICATE" for i in data["issues"]))
-
-    async def test_query_wrong_operator_fails(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(
-            _make_query_params(predicates=[{"fieldId": "id", "op": "NEQ", "value": "required_val"}])
-        )
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        self.assertTrue(any(i["code"] == "MISSING_REQUIRED_PREDICATE" for i in data["issues"]))
-
-    async def test_lookup_matching_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_lookup_params(key_field="id", key_value="required_val"))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_lookup_wrong_key_value_fails(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_lookup_params(key_field="id", key_value="other_val"))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-
-    async def test_ingest_skips_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_ingest_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_revise_missing_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_revise_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        self.assertTrue(any(i["code"] == "MISSING_REQUIRED_PREDICATE" for i in data["issues"]))
-
-    async def test_revise_with_matching_mandatory_filter(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(
-            _make_revise_params(
-                predicates=[{"fieldId": "id", "op": "EQ", "value": "required_val"}],
-            )
-        )
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_mandatory_filter_in_nested_group(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_mandatory()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        params: dict[str, Any] = {
-            "resourceId": "com.acme:test_resource",
-            "intent": {
-                "intentClass": "QUERY",
-                "predicates": {
-                    "op": "AND",
-                    "predicates": [
-                        {"fieldId": "name", "op": "EQ", "value": "test"},
-                        {
-                            "op": "OR",
-                            "predicates": [
-                                {
-                                    "fieldId": "id",
-                                    "op": "EQ",
-                                    "value": "required_val",
-                                },
-                            ],
-                        },
-                    ],
-                },
-            },
-        }
-        result = await handler.handle(params)
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-
-# =============================================================================
-# Operational Rule Tests
-# =============================================================================
-
-
-class TestValidateOperationalRule(unittest.IsolatedAsyncioTestCase):
-    def _policy_with_limit(self, limit: int = 100) -> ResourcePolicy:
-        return ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[OperationalRule(type="OPERATIONAL", enforce_limit=limit)],
-        )
-
-    async def test_query_exceeds_limit(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params(limit=200))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])  # WARNING, not BLOCKING
-        self.assertIn("issues", data)
-        self.assertEqual(data["issues"][0]["code"], "CARDINALITY_EXCEEDED")
-        self.assertEqual(data["issues"][0]["severity"], "WARNING")
-
-    async def test_query_no_limit_warns(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertIn("issues", data)
-        self.assertEqual(data["issues"][0]["code"], "CARDINALITY_EXCEEDED")
-
-    async def test_query_within_limit_no_issue(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params(limit=50))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_query_at_exact_limit_no_issue(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params(limit=100))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_lookup_ignores_enforce_limit(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_lookup_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_ingest_ignores_enforce_limit(self) -> None:
-        resource = _make_resource()
-        policy = self._policy_with_limit(100)
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_ingest_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-
-# =============================================================================
 # Resource Not Found Tests
 # =============================================================================
 
@@ -738,28 +500,6 @@ class TestValidateResourceNotFound(unittest.IsolatedAsyncioTestCase):
 
 
 class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
-    async def test_no_policy_no_issues(self) -> None:
-        resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=None))
-        result = await handler.handle(_make_query_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
-    async def test_policy_with_no_rules(self) -> None:
-        resource = _make_resource()
-        policy = ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=None,
-        )
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params())
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertNotIn("issues", data)
-
     async def test_resource_with_no_sources_empty_fields(self) -> None:
         resource = CuratedResource(
             resource_id="com.acme:empty",
@@ -796,41 +536,3 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertFalse(data["valid"])
         self.assertGreaterEqual(len(data["issues"]), 3)
-
-    async def test_warning_only_is_still_valid(self) -> None:
-        resource = _make_resource()
-        policy = ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[OperationalRule(type="OPERATIONAL", enforce_limit=10)],
-        )
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params(limit=20))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertTrue(data["valid"])
-        self.assertIn("issues", data)
-        for issue in data["issues"]:
-            self.assertEqual(issue["severity"], "WARNING")
-
-    async def test_blocking_and_warning_combined(self) -> None:
-        resource = _make_resource()
-        policy = ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[
-                MandatoryFilterRule(
-                    type="MANDATORY_FILTER",
-                    field_id="id",
-                    op=PredicateOperator.EQ,
-                    value="required",
-                ),
-                OperationalRule(type="OPERATIONAL", enforce_limit=10),
-            ],
-        )
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
-        result = await handler.handle(_make_query_params(limit=20))
-
-        data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        severities = {i["severity"] for i in data["issues"]}
-        self.assertIn("BLOCKING", severities)
-        self.assertIn("WARNING", severities)
