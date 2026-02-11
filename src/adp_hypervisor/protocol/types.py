@@ -254,7 +254,7 @@ class ClientCapabilities(ADPModel):
 
     model_config = ConfigDict(extra="allow")
 
-    experimental: dict[str, Any] | None = PydanticField(
+    experimental: dict[str, dict[str, Any]] | None = PydanticField(
         default=None, description="Experimental, non-standard capabilities"
     )
 
@@ -264,7 +264,7 @@ class ServerCapabilities(ADPModel):
 
     model_config = ConfigDict(extra="allow")
 
-    experimental: dict[str, Any] | None = PydanticField(
+    experimental: dict[str, dict[str, Any]] | None = PydanticField(
         default=None, description="Experimental, non-standard capabilities"
     )
     supported_intent_classes: list[IntentClass] | None = PydanticField(
