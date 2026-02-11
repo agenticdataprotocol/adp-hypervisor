@@ -41,21 +41,19 @@ class CuratedResource(Resource):
     Definition of a resource in the semantic layer.
 
     Extends Resource with curation-specific fields for backend binding
-    and source definitions.
+    and a single source definition.
     """
 
     backend_id: str = PydanticField(
         ...,
         description="Reference to the backend in physical.yaml that provides this resource.",
     )
-    sources: list[SourceDefinition] = PydanticField(
+    source_definition: SourceDefinition = PydanticField(
         ...,
         description=(
-            "List of source definitions for this resource. Currently only a single source "
-            "element is supported; the array structure is preserved for future support of "
-            "multiple sources per resource. Each source represents a specific data source "
-            "within the backend (table, collection, prefix, etc.) and has its own field "
-            "definitions. At least one source MUST be provided for each resource."
+            "Source definition for this resource. Represents the single data source within "
+            "the backend (table, collection, prefix, etc.) that backs this resource and "
+            "defines its fields."
         ),
     )
 
@@ -74,7 +72,7 @@ class SemanticManifest(ADPModel):
         ...,
         description=(
             "List of resource definitions. Required. Each entry binds a resourceId to one "
-            "backend and (currently) one source. ADP operations like adp.discover and "
+            "backend and one source definition. ADP operations like adp.discover and "
             "adp.describe rely on these explicit resource definitions."
         ),
     )

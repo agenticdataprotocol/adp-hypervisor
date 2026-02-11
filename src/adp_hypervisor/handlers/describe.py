@@ -249,9 +249,9 @@ class DescribeHandler(Handler):
             )
 
     def _extract_fields(self, resource: Any) -> list[Field]:
-        """Extract fields from the resource's first source definition."""
-        if resource.sources and resource.sources[0].fields:
-            return list(resource.sources[0].fields)
+        """Extract fields from the resource's source definition."""
+        if resource.source_definition.fields:
+            return list(resource.source_definition.fields)
         return []
 
     def _build_capabilities(

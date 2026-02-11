@@ -75,14 +75,14 @@ def _make_sample_manifests() -> tuple[PhysicalManifest, SemanticManifest, Policy
                     "intentClasses": ["QUERY"],
                     "version": 1,
                     "backendId": "db1",
-                    "sources": [{"source": "events_v1"}],
+                    "sourceDefinition": {"source": "events_v1"},
                 },
                 {
                     "resourceId": "com.acme:events",
                     "intentClasses": ["QUERY"],
                     "version": 2,
                     "backendId": "db1",
-                    "sources": [{"source": "events_v2"}],
+                    "sourceDefinition": {"source": "events_v2"},
                 },
             ],
         }
@@ -192,7 +192,7 @@ class TestManifestIndexRefresh(unittest.TestCase):
                             "intentClasses": ["QUERY"],
                             "backendId": "db2",
                             "version": 1,
-                            "sources": [{"source": "extra"}],
+                            "sourceDefinition": {"source": "extra"},
                         }
                     ),
                 ]

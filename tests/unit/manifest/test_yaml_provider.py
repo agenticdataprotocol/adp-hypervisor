@@ -177,11 +177,10 @@ class TestYamlManifestProviderResources(unittest.TestCase):
         index = _make_index()
         resource = index.get_resource("com.acme.finance:bank_failures")
         self.assertIsNotNone(resource)
-        self.assertIsNotNone(resource.sources)
-        self.assertEqual(len(resource.sources), 1)
-        self.assertEqual(resource.sources[0].source, "v_failures_consolidated")
-        self.assertIsNotNone(resource.sources[0].fields)
-        field_ids = [f.field_id for f in resource.sources[0].fields]
+        self.assertIsNotNone(resource.source_definition)
+        self.assertEqual(resource.source_definition.source, "v_failures_consolidated")
+        self.assertIsNotNone(resource.source_definition.fields)
+        field_ids = [f.field_id for f in resource.source_definition.fields]
         self.assertIn("bank_id", field_ids)
         self.assertIn("bank_name", field_ids)
         self.assertIn("closing_date", field_ids)
@@ -190,8 +189,8 @@ class TestYamlManifestProviderResources(unittest.TestCase):
         index = _make_index()
         resource = index.get_resource("com.acme.finance:failure_vectors")
         self.assertIsNotNone(resource)
-        self.assertIsNotNone(resource.sources)
-        embedding_field = resource.sources[0].fields[0]  # type: ignore[index]
+        self.assertIsNotNone(resource.source_definition)
+        embedding_field = resource.source_definition.fields[0]  # type: ignore[index]
         self.assertIsNotNone(embedding_field.metadata)
         self.assertIsNotNone(embedding_field.metadata.vector)
         self.assertEqual(embedding_field.metadata.vector["dimensions"], 1536)
