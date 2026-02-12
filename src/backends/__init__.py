@@ -8,6 +8,8 @@ from backends.posix.backend import POSIXBackend
 from backends.rdbms.backend import RDBMSBackend
 from backends.rdbms.postgres import PostgresBackend
 from backends.registry import BackendRegistry
+from backends.vector.backend import VectorBackend
+from backends.vector.pgvector import PgVectorBackend
 
 __all__ = [
     # Base
@@ -26,4 +28,7 @@ __all__ = [
     "MongoDBBackend",
     # POSIX
     "POSIXBackend",
+    # Vector
+    "VectorBackend",
+    "PgVectorBackend",
 ]

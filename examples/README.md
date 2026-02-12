@@ -22,12 +22,15 @@ uv sync
 
 ```
 examples/
-├── docker-compose.yml      # Backend infrastructure (Postgres, MongoDB)
+├── docker-compose.yml      # Backend infrastructure (Postgres, pgvector, MongoDB)
 ├── conf/                   # ADP manifest files (all backends)
 │   ├── physical.yaml
 │   ├── semantic.yaml
 │   └── policy.yaml
 ├── postgres/               # Docker init for PostgreSQL
+│   └── init/
+│       └── 01-init.sql
+├── pgvector/               # Docker init for pgvector
 │   └── init/
 │       └── 01-init.sql
 └── mongodb/                # Docker init for MongoDB
@@ -40,6 +43,7 @@ examples/
 | Backend    | Service    | Init Directory |
 |:-----------|:-----------|:---------------|
 | PostgreSQL | `postgres` | `postgres/`    |
+| pgvector   | `pgvector` | `pgvector/`    |
 | MongoDB    | `mongodb`  | `mongodb/`     |
 
 ## Quick Start
@@ -82,9 +86,9 @@ Expected: the response contains `serverInfo` with `name: "adp-hypervisor"` and
 {"jsonrpc":"2.0","id":2,"method":"adp.discover","params":{}}
 ```
 
-Expected: `resources` array with six entries — `pg_demo:customers`,
-`pg_demo:products`, `pg_demo:orders`, `mongo_demo:customers`,
-`mongo_demo:products`, and `mongo_demo:orders`.
+Expected: `resources` array with seven entries — `pg_demo:customers`,
+`pg_demo:products`, `pg_demo:orders`, `pgvector_demo:documents`,
+`mongo_demo:customers`, `mongo_demo:products`, and `mongo_demo:orders`.
 
 ---
 
@@ -122,6 +126,45 @@ Expected: a single result for Alice Johnson.
 ```
 
 Expected: all orders with `status = 'shipped'`, sorted by `ordered_at` descending.
+
+---
+
+#### pgvector Backend (Vector Similarity Search)
+
+##### Describe — Inspect a Resource Contract
+
+```json
+{"jsonrpc":"2.0","id":20,"method":"adp.describe","params":{"resourceId":"pgvector_demo:documents","intentClass":"QUERY"}}
+```
+
+Expected: `usageContract` listing all six fields of the `documents` table.
+The `embedding` field (type `VECTOR`) supports the `SIMILAR` operator.
+
+##### Execute LOOKUP — Fetch a Document by ID
+
+```json
+{"jsonrpc":"2.0","id":21,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"LOOKUP","key":{"fieldId":"id","op":"EQ","value":1},"projections":["id","title","content","category"]}}}
+```
+
+Expected: a single result for "Introduction to PostgreSQL".
+
+##### Execute QUERY — Filter Documents by Category
+
+```json
+{"jsonrpc":"2.0","id":22,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"category","op":"EQ","value":"database"}]},"projections":["id","title","category"],"limit":10}}}
+```
+
+Expected: all documents with `category = 'database'`.
+
+##### Execute QUERY — Vector Similarity Search
+
+```json
+{"jsonrpc":"2.0","id":23,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"text":"[0.9, 0.1, 0.05]","top":3,"distanceFunction":"COSINE"}}]},"projections":["id","title","category"],"limit":5}}}
+```
+
+Expected: the top 3 documents closest to the query vector `[0.9, 0.1, 0.05]`,
+ordered by cosine distance (ascending). Database-related documents should
+appear first since their embeddings are nearest to the query vector.
 
 ---
 
@@ -178,6 +221,15 @@ The `postgres/init/01-init.sql` script creates an `adp_demo` database with:
 | `customers` | 5    | Customer profiles      |
 | `products`  | 6    | Product catalog        |
 | `orders`    | 10   | Customer order records |
+
+### pgvector
+
+The `pgvector/init/01-init.sql` script creates an `adp_demo_vector` database
+with the `vector` extension and:
+
+| Table       | Rows | Description                              |
+|:------------|:-----|:-----------------------------------------|
+| `documents` | 8    | Documents with 3-dimensional embeddings  |
 
 ### MongoDB
 

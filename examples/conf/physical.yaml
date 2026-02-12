@@ -11,6 +11,18 @@ backends:
       type: "env"
       key: "PG_PASSWORD"
 
+  - id: "pgvector_demo"
+    type: "VECTOR"
+    config:
+      type: "VECTOR"
+      provider: "pgvector"
+      index_name: "documents"
+      endpoint: "postgresql://adp_user@localhost:5433/adp_demo_vector"
+      dimensions: 3
+    credentials:
+      type: "env"
+      key: "PG_PASSWORD"
+
   - id: "mongo_demo"
     type: "NOSQL"
     config:
