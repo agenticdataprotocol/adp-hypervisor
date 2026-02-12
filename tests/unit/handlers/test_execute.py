@@ -388,7 +388,7 @@ class TestExecuteBackendErrors(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ExecutionFailedError) as ctx:
             await handler.handle(_make_query_params())
-        self.assertIn("connection lost", ctx.exception.message)
+        self.assertIn("Execution failed", ctx.exception.message)
 
     async def test_resource_without_sources_raises_execution_error(self) -> None:
         resource = CuratedResource(

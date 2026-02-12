@@ -89,7 +89,7 @@ class ExecuteHandler(Handler):
         backend = self._resolve_backend(resource)
         source = self._get_source(resource)
 
-        start_ms = time.monotonic()
+        start_s = time.monotonic()
         try:
             result = await backend.execute(source, request.intent)
         except Exception as exc:
@@ -100,9 +100,9 @@ class ExecuteHandler(Handler):
                 exc_info=True,
             )
             raise ExecutionFailedError(
-                f"Execution failed for resource {request.resource_id!r}: {exc}"
+                f"Execution failed for resource {request.resource_id!r}"
             ) from exc
-        duration_ms = int((time.monotonic() - start_ms) * 1000)
+        duration_ms = int((time.monotonic() - start_s) * 1000)
 
         # TODO: Implement cursor-based pagination. Currently next_cursor is always None.
         # When implemented, encode pagination state into an opaque cursor token
@@ -138,7 +138,11 @@ class ExecuteHandler(Handler):
             ValidationFailedError: If validation produces BLOCKING issues.
         """
         result = await self._validate_handler.handle(params)
-        assert isinstance(result, ValidateResult)
+        if not isinstance(result, ValidateResult):
+            raise ExecutionFailedError(
+                "Internal error: ValidateHandler returned unexpected "
+                f"type {type(result)!r}, expected ValidateResult"
+            )
 
         if not result.valid:
             issues_data = [
