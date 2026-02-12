@@ -121,6 +121,7 @@
             "enum": [
                 "GRAPH",
                 "NOSQL",
+                "POSIX",
                 "RDBMS",
                 "S3",
                 "VECTOR"

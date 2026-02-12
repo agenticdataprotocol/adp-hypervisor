@@ -82,26 +82,37 @@ class TestIgnorePatterns(unittest.IsolatedAsyncioTestCase):
         sub_log = self.root_path / "subdir" / "file.log"
         self.assertTrue(self.backend._should_ignore(sub_log, self.root_path))
 
-    async def test_lookup_ignored_file_fails(self) -> None:
-        """Test that LOOKUP on ignored file raises error."""
-        intent = LookupIntent(
-            key=IdentityPredicate(field_id="path", value="file.log"),
-            projections=None,
-        )
-
-        with self.assertRaisesRegex(RuntimeError, "ignored by ignore patterns"):
-            await self.backend.execute("file.log", intent)
-
-    async def test_lookup_regular_file_succeeds(self) -> None:
-        """Test that LOOKUP on regular file succeeds."""
+    async def test_lookup_on_file_not_supported(self) -> None:
+        """Test that LOOKUP on file raises error (LOOKUP is only for directories)."""
         intent = LookupIntent(
             key=IdentityPredicate(field_id="path", value="file.txt"),
             projections=None,
         )
 
-        result = await self.backend.execute("file.txt", intent)
+        with self.assertRaisesRegex(RuntimeError, "LOOKUP intent is not supported for files"):
+            await self.backend.execute("file.txt", intent)
+
+    async def test_lookup_directory_reads_file_content(self) -> None:
+        """Test that LOOKUP on directory reads a specific file's content."""
+        intent = LookupIntent(
+            key=IdentityPredicate(field_id="file_name", value="file.txt"),
+            projections=None,
+        )
+
+        result = await self.backend.execute("subdir", intent)
         self.assertEqual(len(result.rows), 1)
-        self.assertEqual(result.rows[0]["name"], "file.txt")
+        self.assertEqual(result.rows[0]["file_name"], "file.txt")
+        self.assertEqual(result.rows[0]["content"], "sub content")
+
+    async def test_lookup_ignored_file_fails(self) -> None:
+        """Test that LOOKUP on ignored file within directory raises error."""
+        intent = LookupIntent(
+            key=IdentityPredicate(field_id="file_name", value="file.log"),
+            projections=None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "File not found"):
+            await self.backend.execute(".", intent)
 
     async def test_query_directory_filters_ignored_files(self) -> None:
         """Test that QUERY on directory filters out ignored files."""

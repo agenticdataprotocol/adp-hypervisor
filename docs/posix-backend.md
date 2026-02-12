@@ -8,7 +8,7 @@ The POSIX backend provides ADP Intent-based access to POSIX-compliant filesystem
 - **Security-first design**: Path traversal prevention, symlink protection, root path allowlist
 - **Multiple content formats**: Support for raw text, base64, and URI formats
 - **Function-based operations**: Rename, move, update metadata, append, delete
-- **Directory operations**: List children, create directories, recursive operations
+- **Directory operations**: List children, create directories, read file content
 
 ## Configuration
 
@@ -68,27 +68,32 @@ The `source` parameter in intents can be specified in two formats:
 
 ## Intent Operations
 
+### Intent Support Matrix
+
+| Resource Type | LOOKUP | QUERY | INGEST | REVISE |
+|---------------|--------|-------|--------|--------|
+| directory     | ✓ (read file) | ✓ (list) | ✓ (create file) | ✗ |
+| file          | ✗ | ✓ (read) | ✓ (append) | ✓ (overwrite) |
+
 ### LOOKUP Intent
 
-Returns metadata about a single file or directory.
+**For directories**: Reads a specific file's content within the directory. Requires `file_name` predicate to select the file.
 
-**Example**:
+**For files**: Not supported (use QUERY instead).
+
+**Example - Read file content within directory**:
 ```python
 intent = LookupIntent(
-    key=KeyValue(field_id="path", value="documents/contract.pdf"),
-    projections=["name", "size", "mtime", "object_type"]
+    key=IdentityPredicate(field_id="file_name", value="contract.pdf"),
+    projections=["file_name", "content", "content_format"]
 )
-result = await backend.execute("documents/contract.pdf", intent)
+result = await backend.execute("documents", intent)
 ```
 
 **Response fields**:
-- `name`: Filename
-- `path`: Relative path from root
-- `size`: File size in bytes (files only)
-- `mtime`: Last modification time (ISO 8601)
-- `atime`: Last access time (ISO 8601, files only)
-- `extension`: File extension (files only)
-- `object_type`: "file" or "directory"
+- `file_name`: The filename that was read
+- `content`: File content
+- `content_format`: Content format (raw, base64, or uri)
 
 ### QUERY Intent
 
@@ -200,7 +205,7 @@ result = await backend.execute("documents/existing.txt", intent)
 
 ### REVISE Intent
 
-Modifies existing files or directories.
+Modifies existing files. **Note**: REVISE is only supported for files, not directories.
 
 **Rename file**:
 ```python
@@ -281,9 +286,8 @@ intent = ReviseIntent(
 result = await backend.execute("documents/file.txt", intent)
 ```
 
-**Delete file or directory**:
+**Delete file**:
 ```python
-# Delete file
 intent = ReviseIntent(
     predicates=PredicateGroup(op=LogicOperator.AND, predicates=[]),
     value={
@@ -294,18 +298,6 @@ intent = ReviseIntent(
     }
 )
 result = await backend.execute("documents/temp.txt", intent)
-
-# Delete directory recursively
-intent = ReviseIntent(
-    predicates=PredicateGroup(op=LogicOperator.AND, predicates=[]),
-    value={
-        "function": {
-            "name": "delete",
-            "args": {"recursive": True}
-        }
-    }
-)
-result = await backend.execute("documents/temp_folder", intent)
 ```
 
 ## Security Features
@@ -344,7 +336,9 @@ Common errors and their meanings:
 - **"Symlinks are not allowed"**: Path contains a symlink and `allow_symlinks` is false
 - **"Resource not found"**: File or directory does not exist
 - **"Target already exists"**: INGEST without `overwrite_existing=true` on existing resource
-- **"Directory is not empty"**: Delete operation on non-empty directory without `recursive=true`
+- **"LOOKUP intent is not supported for files"**: LOOKUP can only be used on directories
+- **"REVISE intent is not supported for directories"**: REVISE can only be used on files
+- **"LOOKUP on directory requires 'file_name' key field_id"**: Missing file_name key field_id for directory LOOKUP
 
 ## Best Practices
 

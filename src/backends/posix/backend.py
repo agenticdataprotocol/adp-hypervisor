@@ -162,6 +162,16 @@ class POSIXBackend(Backend):
                         message=f"Resource not found: {source}",
                     )
                 )
+            # For directories, LOOKUP requires file_name key
+            if target.exists() and target.is_dir():
+                if intent.key.field_id != "file_name":
+                    issues.append(
+                        ValidationIssue(
+                            code=ValidationIssueCode.INVALID_FORMAT,
+                            severity=IssueSeverity.BLOCKING,
+                            message="LOOKUP on directory requires 'file_name' key field_id",
+                        )
+                    )
 
         elif isinstance(intent, QueryIntent):
             # QUERY requires existing resource
@@ -186,6 +196,15 @@ class POSIXBackend(Backend):
                         code=ValidationIssueCode.FIELD_NOT_FOUND,
                         severity=IssueSeverity.BLOCKING,
                         message=f"Resource not found: {source}",
+                    )
+                )
+            # REVISE is only supported for files, not directories
+            if target.exists() and target.is_dir():
+                issues.append(
+                    ValidationIssue(
+                        code=ValidationIssueCode.INVALID_FORMAT,
+                        severity=IssueSeverity.BLOCKING,
+                        message="REVISE intent is not supported for directories",
                     )
                 )
 
@@ -223,9 +242,11 @@ class POSIXBackend(Backend):
     # -------------------------------------------------------------------------
 
     async def _execute_lookup(self, source: str, intent: LookupIntent) -> BackendResult:
-        """Execute LOOKUP intent (same as IDENTIFY in prototype).
+        """Execute LOOKUP intent.
 
-        Returns metadata about a single file or directory.
+        For directories: reads a specific file's content within the directory
+        (requires file_name predicate to select the file).
+        For files: not supported (LOOKUP is only for directories per spec).
         """
         root_path, resource_path = self._parse_source(source)
         target = self._resolve_target(root_path, resource_path)
@@ -239,30 +260,53 @@ class POSIXBackend(Backend):
 
         object_type = self._get_object_type(target)
 
+        # LOOKUP on directory: read a specific file's content
         if object_type == "directory":
+            # Extract file_name from key field_id/value
+            if intent.key.field_id == "file_name":
+                file_name = intent.key.value
+            else:
+                raise RuntimeError("LOOKUP on directory requires 'file_name' key field_id")
+
+            file_path = target / file_name
+
+            # Check if file is ignored
+            if self._should_ignore(file_path, root_path):
+                raise RuntimeError(f"File not found: {file_name}")
+
+            if not file_path.exists():
+                raise RuntimeError(f"File not found: {file_name}")
+
+            if not file_path.is_file():
+                raise RuntimeError(f"Path is not a file: {file_name}")
+
+            # Read file content (same as QUERY on file)
+            # Default to raw format for LOOKUP (no predicates available)
+            content_format = "raw"
+
+            if content_format == "uri":
+                content = f"file://{file_path.resolve()}"
+            else:
+                data = file_path.read_bytes()
+                if content_format == "base64":
+                    content = base64.b64encode(data).decode("ascii")
+                else:  # raw
+                    content = data.decode("utf-8", errors="replace")
+
             row: dict[str, Any] = {
-                "name": target.name,
-                "path": str(resource_path),
-                "mtime": self._iso_time(target.stat().st_mtime),
-                "object_type": "directory",
+                "file_name": file_name,
+                "content": content,
+                "content_format": content_format,
             }
+
+            # Apply projections if specified
+            if intent.projections:
+                row = {k: v for k, v in row.items() if k in intent.projections}
+
+            return BackendResult(rows=[row])
         else:
-            st = target.stat()
-            row = {
-                "name": target.name,
-                "path": str(resource_path),
-                "extension": target.suffix.lstrip(".") if target.suffix else "",
-                "size": st.st_size,
-                "mtime": self._iso_time(st.st_mtime),
-                "atime": self._iso_time(st.st_atime),
-                "object_type": "file",
-            }
-
-        # Apply projections if specified
-        if intent.projections:
-            row = {k: v for k, v in row.items() if k in intent.projections}
-
-        return BackendResult(rows=[row])
+            # LOOKUP on file is not supported per spec
+            raise RuntimeError("LOOKUP intent is not supported for files")
 
     async def _execute_query(self, source: str, intent: QueryIntent) -> BackendResult:
         """Execute QUERY intent.
@@ -385,7 +429,10 @@ class POSIXBackend(Backend):
     async def _execute_revise(self, source: str, intent: ReviseIntent) -> BackendResult:
         """Execute REVISE intent.
 
-        Supports: rename, move, update_metadata, overwrite, append, delete.
+        Supports file operations: rename, move, update_metadata, overwrite, append.
+        Note: REVISE is only supported for files, not directories (per spec).
+        For deleting files, use REVISE with delete function.
+        For deleting directories, use PRUNE intent.
         """
         root_path, resource_path = self._parse_source(source)
         target = self._resolve_target(root_path, resource_path)
@@ -398,6 +445,10 @@ class POSIXBackend(Backend):
             raise RuntimeError(f"Cannot modify ignored path: {source}")
 
         object_type = self._get_object_type(target)
+
+        # REVISE is only supported for files, not directories
+        if object_type == "directory":
+            raise RuntimeError("REVISE intent is not supported for directories")
 
         # Check for function-based operations
         function_name, function_args = self._extract_function(intent)
@@ -433,38 +484,20 @@ class POSIXBackend(Backend):
                 return BackendResult(rows=[], metadata={"status": "SUCCESS", "affected": 1})
 
             elif function_name in {"overwrite", "append"}:
-                if object_type == "directory":
-                    raise RuntimeError("Cannot update directory content")
-
                 content, content_format = self._extract_content(intent)
                 mode = "append" if function_name == "append" else "overwrite"
                 self._write_content(target, content, mode=mode)
                 return BackendResult(rows=[], metadata={"status": "SUCCESS", "affected": 1})
 
             elif function_name == "delete":
-                # Handle delete via REVISE (alternative to PRUNE intent)
-                recursive = function_args.get("recursive", False)
-
-                if object_type == "directory":
-                    entries = list(target.iterdir())
-                    if entries and not recursive:
-                        raise RuntimeError("Directory is not empty. Set recursive=true to delete.")
-                    if recursive:
-                        shutil.rmtree(target)
-                    else:
-                        target.rmdir()
-                else:
-                    target.unlink()
-
+                # Delete file via REVISE
+                target.unlink()
                 return BackendResult(rows=[], metadata={"status": "SUCCESS", "affected": 1})
 
             else:
                 raise RuntimeError(f"Unsupported function: {function_name!r}")
 
         # Default: content update (overwrite)
-        if object_type == "directory":
-            raise RuntimeError("Cannot update directory content without function")
-
         content, content_format = self._extract_content(intent)
         self._write_content(target, content, mode="overwrite")
         return BackendResult(rows=[], metadata={"status": "SUCCESS", "affected": 1})
