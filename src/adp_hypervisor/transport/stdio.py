@@ -59,14 +59,15 @@ class StdioTransport(Transport):
 
         if self._stdout is None:
             loop = asyncio.get_running_loop()
+            write_protocol = asyncio.streams.FlowControlMixin()
             transport_w = await loop.connect_write_pipe(
-                asyncio.BaseProtocol,
+                lambda: write_protocol,
                 sys.stdout,
             )
             self._write_transport = transport_w[0]
             self._stdout = asyncio.StreamWriter(
                 self._write_transport,
-                asyncio.BaseProtocol(),
+                write_protocol,
                 None,
                 loop,
             )

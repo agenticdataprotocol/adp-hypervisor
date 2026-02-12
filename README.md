@@ -40,12 +40,84 @@ uv sync --all-extras
 pip install -e ".[dev]"
 ```
 
+## Quick Start
+
+### 1. Prepare Manifest Files
+
+Create a configuration directory with three YAML manifest files:
+
+```bash
+mkdir -p my-config
+cp conf/physical.yaml.template my-config/physical.yaml
+cp conf/semantic.yaml.template my-config/semantic.yaml
+cp conf/policy.yaml.template my-config/policy.yaml
+```
+
+Edit each file to configure your backends, resources, and policies. See the templates in `conf/` for detailed examples,
+or jump straight to the [examples](examples/) directory for a ready-to-run demo.
+
+### 2. Start the Server
+
+```bash
+python -m adp_hypervisor --config my-config
+```
+
+The server starts in stdio mode, reading JSON-RPC requests from stdin and writing responses to stdout.
+
+### CLI Usage
+
+```
+python -m adp_hypervisor --config <path> [--log-level LEVEL] [--transport TYPE]
+```
+
+| Option        | Default  | Description                                                            |
+|:--------------|:---------|:-----------------------------------------------------------------------|
+| `--config`    | Required | Path to manifest directory (physical.yaml, semantic.yaml, policy.yaml) |
+| `--log-level` | `INFO`   | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL                   |
+| `--transport` | `stdio`  | Transport type: `stdio` (HTTP planned for future release)              |
+
+### 3. Send a Request
+
+With the server running, send a JSON-RPC request via stdin:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"adp.initialize","params":{"protocolVersion":"2026-01-20","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
+  | python -m adp_hypervisor --config my-config
+```
+
+### Programmatic Usage
+
+```python
+import asyncio
+from adp_hypervisor import ADPServer
+
+server = ADPServer(config_dir="my-config")
+asyncio.run(server.run())
+```
+
+## Examples
+
+The [examples](examples/) directory contains a ready-to-run demo with Docker Compose
+infrastructure and pre-configured manifests. See [examples/README.md](examples/README.md) for the
+full walkthrough.
+
+| Backend    | Status         | Description                                                                    |
+|:-----------|:---------------|:-------------------------------------------------------------------------------|
+| PostgreSQL | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
+
 ## Development
 
 ### Running Tests
 
 ```bash
-uv run pytest
+# Unit tests
+uv run python -m unittest discover -s tests/unit -t tests -v
+
+# Integration tests (requires Docker for testcontainers)
+uv run python -m unittest discover -s tests/integration -v
+
+# All tests
+uv run python -m unittest discover -s tests -t tests -v
 ```
 
 ### Code Formatting
@@ -70,10 +142,20 @@ uv run mypy src/
 
 ```
 adp-hypervisor/
-├── pyproject.toml          # Project configuration
-├── src/adp_hypervisor/     # Main hypervisor package
-├── src/backends/           # Backend implementations
-└── tests/                  # Test suite
+├── pyproject.toml              # Project configuration
+├── conf/                       # Manifest templates
+├── examples/                   # Ready-to-run demo (Docker + manifests)
+├── src/adp_hypervisor/         # Main hypervisor package
+│   ├── server.py               # ADPServer main class
+│   ├── __main__.py             # CLI entry point
+│   ├── transport/              # Transport layer (stdio, HTTP)
+│   ├── protocol/               # JSON-RPC types, errors, dispatcher
+│   ├── handlers/               # ADP method handlers
+│   └── manifest/               # Manifest models and providers
+├── src/backends/               # Backend implementations (RDBMS, etc.)
+└── tests/                      # Test suite
+    ├── unit/                   # Unit tests
+    └── integration/            # Integration & E2E tests
 ```
 
 ## License

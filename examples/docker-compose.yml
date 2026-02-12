@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: adp-demo-pg
+    environment:
+      POSTGRES_USER: adp_user
+      POSTGRES_PASSWORD: adp_pass
+      POSTGRES_DB: adp_demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adp_user -d adp_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
