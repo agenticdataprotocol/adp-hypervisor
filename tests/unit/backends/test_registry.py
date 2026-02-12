@@ -3,7 +3,7 @@
 import unittest
 
 from adp_hypervisor.manifest.physical import BackendDefinition, BackendType, RDBMSBackendConfig
-from adp_hypervisor.protocol.types import Intent, ValidationIssue
+from adp_hypervisor.protocol.types import Intent
 from backends.base import Backend, BackendResult
 from backends.registry import BackendRegistry
 
@@ -28,9 +28,6 @@ class FakeBackend(Backend):
 
     async def disconnect(self) -> None:
         self.disconnected = True
-
-    async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
-        return []
 
     async def execute(self, source: str, intent: Intent) -> BackendResult:
         return BackendResult(rows=[])
