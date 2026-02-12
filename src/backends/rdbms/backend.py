@@ -14,7 +14,6 @@ from adp_hypervisor.manifest.physical import BackendDefinition
 from adp_hypervisor.protocol.types import (
     IngestIntent,
     Intent,
-    IssueSeverity,
     LookupIntent,
     Predicate,
     PredicateGroup,
@@ -22,8 +21,6 @@ from adp_hypervisor.protocol.types import (
     QueryIntent,
     ReviseIntent,
     SortOrder,
-    ValidationIssue,
-    ValidationIssueCode,
 )
 from backends.base import Backend, BackendResult
 
@@ -108,6 +105,7 @@ class RDBMSBackend(Backend):
     # -------------------------------------------------------------------------
 
     def _build_lookup_sql(self, source: str, intent: LookupIntent) -> tuple[str, list[Any]]:
+        # params collects bind values for parameterized query placeholders ($1, $2, …)
         params: list[Any] = []
         projections = self._build_select(intent.projections)
         table = self.quote_identifier(source)
@@ -188,28 +186,6 @@ class RDBMSBackend(Backend):
     # -------------------------------------------------------------------------
     # Backend interface implementation
     # -------------------------------------------------------------------------
-
-    async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
-        """Validate an intent by attempting to build the SQL without executing it.
-
-        Args:
-            source: The source identifier (table name).
-            intent: The intent to validate.
-
-        Returns:
-            A list of validation issues. An empty list means the intent is valid.
-        """
-        try:
-            self._intent_to_sql(source, intent)
-        except Exception as exc:
-            return [
-                ValidationIssue(
-                    code=ValidationIssueCode.INVALID_FORMAT,
-                    severity=IssueSeverity.BLOCKING,
-                    message=str(exc),
-                )
-            ]
-        return []
 
     async def execute(self, source: str, intent: Intent) -> BackendResult:
         """Translate *intent* to SQL and execute it.

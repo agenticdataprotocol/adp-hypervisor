@@ -1,8 +1,7 @@
 """
 PostgreSQL backend implementation.
 
-Uses asyncpg for async connection pooling and automatic schema discovery
-via ``information_schema.columns``.
+Uses asyncpg for async connection pooling.
 """
 
 import logging
@@ -78,9 +77,10 @@ class PostgresBackend(RDBMSBackend):
         return self._pool
 
     def _resolve_dsn(self) -> str:
-        """Build the DSN, resolving credentials if configured."""
+        """Build the DSN (Data Source Name), resolving credentials if configured."""
         config = self._definition.config
-        assert isinstance(config, RDBMSBackendConfig)
+        if not isinstance(config, RDBMSBackendConfig):
+            raise TypeError(f"Expected RDBMSBackendConfig, got {type(config).__name__!r}")
         dsn = config.uri
         if self._definition.credentials is not None:
             try:
@@ -96,7 +96,8 @@ class PostgresBackend(RDBMSBackend):
     def _schema_name(self) -> str:
         """Return the database schema to query, defaulting to ``public``."""
         config = self._definition.config
-        assert isinstance(config, RDBMSBackendConfig)
+        if not isinstance(config, RDBMSBackendConfig):
+            raise TypeError(f"Expected RDBMSBackendConfig, got {type(config).__name__!r}")
         return config.schema_name or "public"
 
 

@@ -2,8 +2,8 @@
 Backend abstract base class.
 
 Defines the abstract interface that all ADP backend implementations must follow.
-Each backend handles connection management, intent validation, and intent
-execution for a specific data source type.
+Each backend handles connection management and intent execution for a specific
+data source type.
 """
 
 import logging
@@ -12,10 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from adp_hypervisor.manifest.physical import BackendDefinition
-from adp_hypervisor.protocol.types import (
-    Intent,
-    ValidationIssue,
-)
+from adp_hypervisor.protocol.types import Intent
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +64,6 @@ class Backend(ABC):
     @abstractmethod
     async def disconnect(self) -> None:
         """Close the connection and release resources."""
-
-    @abstractmethod
-    async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
-        """Validate an intent against the data source.
-
-        Args:
-            source: The source identifier.
-            intent: The intent to validate.
-
-        Returns:
-            A list of validation issues. An empty list means the intent is valid.
-        """
 
     @abstractmethod
     async def execute(self, source: str, intent: Intent) -> BackendResult:

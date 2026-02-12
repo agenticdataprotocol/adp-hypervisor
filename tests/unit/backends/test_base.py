@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 from adp_hypervisor.manifest.physical import BackendDefinition, BackendType, RDBMSBackendConfig
 from adp_hypervisor.protocol.types import (
     Intent,
-    ValidationIssue,
 )
 from backends.base import Backend, BackendResult
 
@@ -29,9 +28,6 @@ class StubBackend(Backend):
 
     async def disconnect(self) -> None:
         self.disconnected = True
-
-    async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
-        return []
 
     async def execute(self, source: str, intent: Intent) -> BackendResult:
         return BackendResult(rows=[{"id": 1, "name": "test"}])
@@ -107,11 +103,6 @@ class TestStubBackendLifecycle(unittest.IsolatedAsyncioTestCase):
         await self.backend.connect()
         await self.backend.disconnect()
         self.assertTrue(self.backend.disconnected)
-
-    async def test_validate(self) -> None:
-        mock_intent: Any = MagicMock()
-        issues = await self.backend.validate("users", mock_intent)
-        self.assertEqual(issues, [])
 
     async def test_execute(self) -> None:
         mock_intent: Any = MagicMock()

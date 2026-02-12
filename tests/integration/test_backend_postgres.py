@@ -290,32 +290,6 @@ class TestQueryIntent(_SeededBackendMixin):
 
 
 # =============================================================================
-# Validate Tests
-# =============================================================================
-
-
-class TestValidate(_SeededBackendMixin):
-    async def test_validate_valid_lookup(self) -> None:
-        intent = LookupIntent(
-            key=IdentityPredicate(field_id="id", value=1),
-        )
-        issues = await self.backend.validate("users", intent)
-        self.assertEqual(issues, [])
-
-    async def test_validate_valid_query(self) -> None:
-        intent = QueryIntent(
-            predicates=PredicateGroup(
-                op="AND",
-                predicates=[
-                    Predicate(field_id="age", op=PredicateOperator.GT, value=20),
-                ],
-            ),
-        )
-        issues = await self.backend.validate("users", intent)
-        self.assertEqual(issues, [])
-
-
-# =============================================================================
 # Unsupported Intent Tests
 # =============================================================================
 
@@ -338,9 +312,3 @@ class TestUnsupportedIntents(_SeededBackendMixin):
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
             await self.backend.execute("users", intent)
-
-    async def test_validate_ingest_returns_issue(self) -> None:
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        issues = await self.backend.validate("users", intent)
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].severity, "BLOCKING")
