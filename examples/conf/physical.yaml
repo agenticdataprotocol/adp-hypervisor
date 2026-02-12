@@ -10,3 +10,10 @@ backends:
     credentials:
       type: "env"
       key: "PG_PASSWORD"
+
+  - id: "mongo_demo"
+    type: "NOSQL"
+    config:
+      type: "NOSQL"
+      uri: "mongodb://adp_user:adp_pass@localhost:27017"
+      database: "adp_demo"

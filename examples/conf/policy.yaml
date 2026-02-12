@@ -1,0 +1,18 @@
+version: "1.0.0"
+
+policies:
+  - resourceId: "pg_demo:orders"
+    rules:
+      - type: "OPERATIONAL"
+        enforceLimit: 50
+        defaultOrderBy:
+          fieldId: "ordered_at"
+          direction: "DESC"
+
+  - resourceId: "mongo_demo:orders"
+    rules:
+      - type: "OPERATIONAL"
+        enforceLimit: 50
+        defaultOrderBy:
+          fieldId: "ordered_at"
+          direction: "DESC"

@@ -9,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres-backend/init:/docker-entrypoint-initdb.d
+      - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U adp_user -d adp_demo"]
       interval: 5s
@@ -26,7 +26,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongodb-backend/init:/docker-entrypoint-initdb.d
+      - ./mongodb/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
