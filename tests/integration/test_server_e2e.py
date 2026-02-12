@@ -14,6 +14,7 @@ from typing import Any
 
 from testcontainers.postgres import PostgresContainer
 
+from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
 from adp_hypervisor.server import ADPServer
 from adp_hypervisor.transport.base import Transport
 
@@ -189,7 +190,12 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         _write_manifest_files(tmpdir_path, dsn)
 
         self.transport = _InMemoryTransport()
-        self.server = ADPServer(config_dir=tmpdir_path, transport=self.transport)
+        provider = YamlManifestProvider(
+            physical_path=tmpdir_path / "physical.yaml",
+            semantic_path=tmpdir_path / "semantic.yaml",
+            policy_path=tmpdir_path / "policy.yaml",
+        )
+        self.server = ADPServer(manifest_provider=provider, transport=self.transport)
 
     async def asyncTearDown(self) -> None:
         await self.server.stop()

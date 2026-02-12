@@ -8,7 +8,6 @@ protocol dispatcher, handlers, manifest provider, and backend registry.
 import asyncio
 import logging
 import signal
-from pathlib import Path
 
 from adp_hypervisor.handlers import (
     DescribeHandler,
@@ -20,7 +19,7 @@ from adp_hypervisor.handlers import (
 )
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.physical import BackendDefinition, BackendType
-from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
+from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.protocol.dispatcher import Dispatcher
 from adp_hypervisor.transport.base import Transport
 from adp_hypervisor.transport.stdio import StdioTransport
@@ -56,17 +55,17 @@ class ADPServer:
 
     def __init__(
         self,
-        config_dir: str | Path,
+        manifest_provider: ManifestProvider,
         transport: Transport | None = None,
     ) -> None:
         """Initialize the server.
 
         Args:
-            config_dir: Path to the directory containing physical.yaml,
-                semantic.yaml, and policy.yaml manifest files.
+            manifest_provider: Provider that loads physical, semantic,
+                and policy manifests from any storage backend.
             transport: Optional transport instance. Defaults to StdioTransport.
         """
-        self._config_dir = Path(config_dir)
+        self._manifest_provider = manifest_provider
         self._transport = transport or StdioTransport()
         self._dispatcher = Dispatcher()
         self._backend_registry = BackendRegistry()
@@ -138,30 +137,10 @@ class ADPServer:
             server_task.result()
 
     def _load_manifests(self) -> None:
-        """Load manifests from the config directory and build the index."""
-        physical_path = self._config_dir / "physical.yaml"
-        semantic_path = self._config_dir / "semantic.yaml"
-        policy_path = self._config_dir / "policy.yaml"
-
-        for path in (physical_path, semantic_path):
-            if not path.exists():
-                raise FileNotFoundError(f"Manifest file not found: {path}")
-
-        # TODO: Policy enforcement is not yet implemented. The policy file is
-        # loaded by YamlManifestProvider but rules are not applied during
-        # validate/execute. For now we accept a missing policy file gracefully.
-        if not policy_path.exists():
-            policy_path.write_text("version: '1.0.0'\n", encoding="utf-8")
-
-        provider = YamlManifestProvider(
-            physical_path=physical_path,
-            semantic_path=semantic_path,
-            policy_path=policy_path,
-        )
-        provider.load()
-
-        self._manifest_index = ManifestIndex(provider)
-        logger.info("Manifests loaded from %s", self._config_dir)
+        """Load manifests from the provider and build the index."""
+        self._manifest_provider.load()
+        self._manifest_index = ManifestIndex(self._manifest_provider)
+        logger.info("Manifests loaded")
 
     async def _initialize_backends(self) -> None:
         """Create and connect backend instances from the physical manifest."""

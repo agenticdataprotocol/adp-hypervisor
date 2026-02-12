@@ -15,7 +15,9 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
+from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
 from adp_hypervisor.server import ADPServer
 from adp_hypervisor.transport.stdio import StdioTransport
 
@@ -61,6 +63,40 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
+    """Create a YAML manifest provider from a config directory.
+
+    Args:
+        config_dir: Path to the directory containing physical.yaml,
+            semantic.yaml, and policy.yaml manifest files.
+
+    Returns:
+        A configured YamlManifestProvider instance.
+
+    Raises:
+        FileNotFoundError: If required manifest files are missing.
+    """
+    physical_path = config_dir / "physical.yaml"
+    semantic_path = config_dir / "semantic.yaml"
+    policy_path = config_dir / "policy.yaml"
+
+    for path in (physical_path, semantic_path):
+        if not path.exists():
+            raise FileNotFoundError(f"Manifest file not found: {path}")
+
+    # TODO: Policy enforcement is not yet implemented. The policy file is
+    # loaded by YamlManifestProvider but rules are not applied during
+    # validate/execute. For now we accept a missing policy file gracefully.
+    if not policy_path.exists():
+        policy_path.write_text("version: '1.0.0'\n", encoding="utf-8")
+
+    return YamlManifestProvider(
+        physical_path=physical_path,
+        semantic_path=semantic_path,
+        policy_path=policy_path,
+    )
+
+
 def main(args: list[str] | None = None) -> None:
     """Parse arguments and run the ADP server.
 
@@ -77,7 +113,8 @@ def main(args: list[str] | None = None) -> None:
         sys.exit(1)
 
     transport = StdioTransport()
-    server = ADPServer(config_dir=parsed.config, transport=transport)
+    provider = _create_yaml_provider(Path(parsed.config))
+    server = ADPServer(manifest_provider=provider, transport=transport)
 
     logger.info(
         "Starting ADP Hypervisor: config=%s, transport=%s, log_level=%s",
