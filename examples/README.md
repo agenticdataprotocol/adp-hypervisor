@@ -36,10 +36,13 @@ examples/
 ├── mongodb/                # Docker init for MongoDB
 │   └── init/
 │       └── 01-init.js
-└── posix/                  # Sample files for POSIX filesystem backend
-    └── data/
-        ├── products/       # Product description text files (6 files)
-        └── invoices/       # Invoice text files (5 files)
+├── posix/                  # Sample files for POSIX filesystem backend
+│   └── data/
+│       ├── products/       # Product description text files (6 files)
+│       └── invoices/       # Invoice text files (5 files)
+└── goose-cli/              # Goose CLI skill + demo scenarios
+    ├── skills/             # ADP Data Hypervisor skill for Goose
+    └── scenarios/          # Step-by-step walkthrough guides
 ```
 
 ## Available Backends
@@ -92,7 +95,7 @@ Expected: the response contains `serverInfo` with `name: "adp-hypervisor"` and
 ```
 
 Expected: `resources` array with nine entries — `pg_demo:customers`,
-`pg_demo:products`, `pg_demo:orders`, `pgvector_demo:documents`,
+`pg_demo:products`, `pg_demo:orders`, `pgvector_demo:feedback`,
 `mongo_demo:customers`, `mongo_demo:products`, `mongo_demo:orders`,
 `posix_demo:products`, and `posix_demo:invoices`.
 
@@ -135,42 +138,42 @@ Expected: all orders with `status = 'shipped'`, sorted by `ordered_at` descendin
 
 ---
 
-#### pgvector Backend (Vector Similarity Search)
+#### pgvector Backend (Semantic Feedback Search)
 
 ##### Describe — Inspect a Resource Contract
 
 ```json
-{"jsonrpc":"2.0","id":20,"method":"adp.describe","params":{"resourceId":"pgvector_demo:documents","intentClass":"QUERY"}}
+{"jsonrpc":"2.0","id":20,"method":"adp.describe","params":{"resourceId":"pgvector_demo:feedback","intentClass":"QUERY"}}
 ```
 
-Expected: `usageContract` listing all six fields of the `documents` table.
+Expected: `usageContract` listing all eight fields of the `feedback` table.
 The `embedding` field (type `VECTOR`) supports the `SIMILAR` operator.
 
-##### Execute LOOKUP — Fetch a Document by ID
+##### Execute LOOKUP — Fetch a Feedback Entry by ID
 
 ```json
-{"jsonrpc":"2.0","id":21,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"LOOKUP","key":{"fieldId":"id","op":"EQ","value":1},"projections":["id","title","content","category"]}}}
+{"jsonrpc":"2.0","id":21,"method":"adp.execute","params":{"resourceId":"pgvector_demo:feedback","intent":{"intentClass":"LOOKUP","key":{"fieldId":"id","op":"EQ","value":1},"projections":["id","title","content","category","product_name","rating"]}}}
 ```
 
-Expected: a single result for "Introduction to PostgreSQL".
+Expected: a single result for "Excellent wireless mouse".
 
-##### Execute QUERY — Filter Documents by Category
+##### Execute QUERY — Filter Feedback by Category
 
 ```json
-{"jsonrpc":"2.0","id":22,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"category","op":"EQ","value":"database"}]},"projections":["id","title","category"],"limit":10}}}
+{"jsonrpc":"2.0","id":22,"method":"adp.execute","params":{"resourceId":"pgvector_demo:feedback","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"category","op":"EQ","value":"Electronics"}]},"projections":["id","title","product_name","rating"],"limit":10}}}
 ```
 
-Expected: all documents with `category = 'database'`.
+Expected: all feedback with `category = 'Electronics'`.
 
 ##### Execute QUERY — Vector Similarity Search
 
 ```json
-{"jsonrpc":"2.0","id":23,"method":"adp.execute","params":{"resourceId":"pgvector_demo:documents","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"text":"[0.9, 0.1, 0.05]","top":3,"distanceFunction":"COSINE"}}]},"projections":["id","title","category"],"limit":5}}}
+{"jsonrpc":"2.0","id":23,"method":"adp.execute","params":{"resourceId":"pgvector_demo:feedback","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"text":"[0.9, 0.8, 0.75]","top":3,"distanceFunction":"COSINE"}}]},"projections":["id","title","product_name","rating"],"limit":5}}}
 ```
 
-Expected: the top 3 documents closest to the query vector `[0.9, 0.1, 0.05]`,
-ordered by cosine distance (ascending). Database-related documents should
-appear first since their embeddings are nearest to the query vector.
+Expected: the top 3 feedback entries closest to the query vector `[0.9, 0.8, 0.75]`,
+ordered by cosine distance (ascending). Positive reviews should appear first
+since their embeddings are nearest to the query vector.
 
 ---
 
@@ -281,9 +284,9 @@ The `postgres/init/01-init.sql` script creates an `adp_demo` database with:
 The `pgvector/init/01-init.sql` script creates an `adp_demo_vector` database
 with the `vector` extension and:
 
-| Table       | Rows | Description                              |
-|:------------|:-----|:-----------------------------------------|
-| `documents` | 8    | Documents with 3-dimensional embeddings  |
+| Table      | Rows | Description                                        |
+|:-----------|:-----|:---------------------------------------------------|
+| `feedback` | 10   | Customer feedback with 3-dimensional sentiment embeddings |
 
 ### MongoDB
 
