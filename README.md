@@ -97,13 +97,13 @@ asyncio.run(server.run())
 
 ## Examples
 
-The [examples](examples/) directory contains ready-to-run demos with Docker Compose
+The [examples](examples/) directory contains a ready-to-run demo with Docker Compose
 infrastructure and pre-configured manifests. See [examples/README.md](examples/README.md) for the
 full walkthrough.
 
-| Example                                              | Backend    | Description                                                                    |
-|:-----------------------------------------------------|:-----------|:-------------------------------------------------------------------------------|
-| [postgres-backend](examples/postgres-backend/)       | PostgreSQL | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
+| Backend    | Status         | Description                                                                    |
+|:-----------|:---------------|:-------------------------------------------------------------------------------|
+| PostgreSQL | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
 
 ## Development
 
@@ -144,7 +144,7 @@ uv run mypy src/
 adp-hypervisor/
 ├── pyproject.toml              # Project configuration
 ├── conf/                       # Manifest templates
-├── examples/                   # Ready-to-run demos (Docker + manifests)
+├── examples/                   # Ready-to-run demo (Docker + manifests)
 ├── src/adp_hypervisor/         # Main hypervisor package
 │   ├── server.py               # ADPServer main class
 │   ├── __main__.py             # CLI entry point
