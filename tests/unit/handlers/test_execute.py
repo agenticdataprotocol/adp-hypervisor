@@ -543,7 +543,7 @@ class TestExecuteBackendErrors(unittest.IsolatedAsyncioTestCase):
             version=1,
             description="No sources",
             backend_id="test_backend",
-            sources=None,
+            sources=[],
         )
         backend = _mock_backend()
         # Build handler with direct mock to bypass validation (no fields → validation

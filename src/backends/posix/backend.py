@@ -9,7 +9,6 @@ import base64
 import fnmatch
 import logging
 import os
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any

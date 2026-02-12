@@ -100,7 +100,7 @@ asyncio.run(server.run())
 
 ```bash
 # Unit tests
-uv run python -m unittest discover -s tests/unit -v
+uv run python -m unittest discover -s tests/unit -t tests -v
 
 # Integration tests (requires Docker for testcontainers)
 uv run python -m unittest discover -s tests/integration -v

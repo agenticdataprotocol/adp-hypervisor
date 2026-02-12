@@ -10,7 +10,6 @@ from adp_hypervisor.protocol.types import (
     IngestIntent,
     LogicOperator,
     LookupIntent,
-    Predicate,
     PredicateGroup,
     QueryIntent,
     ReviseIntent,
@@ -301,11 +300,13 @@ class TestPOSIXBackendIngest(unittest.IsolatedAsyncioTestCase):
 
         intent = IngestIntent(
             predicates=PredicateGroup(op=LogicOperator.AND, predicates=[]),
-            payload=[{
-                "content": "New content",
-                "content_format": "raw",
-                "overwrite_existing": True,
-            }],
+            payload=[
+                {
+                    "content": "New content",
+                    "content_format": "raw",
+                    "overwrite_existing": True,
+                }
+            ],
         )
 
         result = await self.backend.execute("existing.txt", intent)
@@ -377,9 +378,7 @@ class TestPOSIXBackendRevise(unittest.IsolatedAsyncioTestCase):
         """Test REVISE renames file."""
         intent = ReviseIntent(
             predicates=PredicateGroup(op=LogicOperator.AND, predicates=[]),
-            payload={
-                "function": {"name": "rename", "args": {"new_name": "renamed.txt"}}
-            },
+            payload={"function": {"name": "rename", "args": {"new_name": "renamed.txt"}}},
         )
 
         result = await self.backend.execute("test.txt", intent)

@@ -766,7 +766,7 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
             intent_classes=[IntentClass.QUERY],
             version=1,
             backend_id="test",
-            sources=None,
+            sources=[],
         )
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(
