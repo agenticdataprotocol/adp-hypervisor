@@ -187,3 +187,51 @@ resources:
           - fieldId: "ordered_at"
             type: "TIMESTAMP"
             description: "Time the order was placed"
+
+  - resourceId: "posix_demo:products"
+    intentClasses: ["LOOKUP", "QUERY", "INGEST", "REVISE"]
+    version: 1
+    description: "Product description files (POSIX)"
+    backendId: "posix_demo"
+    sources:
+      - source: "products"
+        fields:
+          - fieldId: "name"
+            type: "STRING"
+            description: "File or directory name"
+          - fieldId: "file_name"
+            type: "STRING"
+            description: "File name for LOOKUP within a directory"
+          - fieldId: "object_type"
+            type: "STRING"
+            description: "Type of object (file or directory)"
+          - fieldId: "content"
+            type: "STRING"
+            description: "File content"
+          - fieldId: "content_format"
+            type: "STRING"
+            description: "Content format (raw, base64, uri)"
+
+  - resourceId: "posix_demo:invoices"
+    intentClasses: ["LOOKUP", "QUERY", "INGEST", "REVISE"]
+    version: 1
+    description: "Invoice files (POSIX)"
+    backendId: "posix_demo"
+    sources:
+      - source: "invoices"
+        fields:
+          - fieldId: "name"
+            type: "STRING"
+            description: "File or directory name"
+          - fieldId: "file_name"
+            type: "STRING"
+            description: "File name for LOOKUP within a directory"
+          - fieldId: "object_type"
+            type: "STRING"
+            description: "Type of object (file or directory)"
+          - fieldId: "content"
+            type: "STRING"
+            description: "File content"
+          - fieldId: "content_format"
+            type: "STRING"
+            description: "Content format (raw, base64, uri)"

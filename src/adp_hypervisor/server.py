@@ -54,6 +54,11 @@ def _create_backend(definition: BackendDefinition) -> Backend | None:
 
         return PgVectorBackend(definition=definition)
 
+    if definition.type == BackendType.POSIX:
+        from backends.posix import POSIXBackend
+
+        return POSIXBackend(definition=definition)
+
     return None
 
 

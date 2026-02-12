@@ -1,0 +1,8 @@
+Wireless Mouse
+Category: Electronics
+Price: $29.99
+In Stock: Yes
+
+A compact wireless mouse with ergonomic design and long battery life.
+Features 2.4 GHz connectivity, adjustable DPI (800/1200/1600), and
+silent click buttons. Compatible with Windows, macOS, and Linux.

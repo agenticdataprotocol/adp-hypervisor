@@ -29,3 +29,15 @@ backends:
       type: "NOSQL"
       uri: "mongodb://adp_user:adp_pass@localhost:27017"
       database: "adp_demo"
+
+  - id: "posix_demo"
+    type: "POSIX"
+    config:
+      type: "POSIX"
+      root_paths:
+        - "examples/posix/data"
+      allow_symlinks: false
+      ignore_patterns:
+        - ".DS_Store"
+        - "*.pyc"
+        - "__pycache__"

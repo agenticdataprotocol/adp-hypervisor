@@ -1,0 +1,13 @@
+INVOICE #INV-2025-002
+Date: 2025-12-03
+
+Bill To: Alice Johnson, Seattle
+
+Items:
+  1x Mechanical Keyboard     $89.99
+
+Subtotal:  $89.99
+Tax (10%):  $9.00
+Total:     $98.99
+
+Status: Delivered

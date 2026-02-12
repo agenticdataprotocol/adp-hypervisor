@@ -1,0 +1,14 @@
+INVOICE #INV-2025-005
+Date: 2025-12-18
+
+Bill To: Eva Martinez, New York
+
+Items:
+  1x USB-C Hub               $45.00
+  2x Wireless Mouse          $59.98
+
+Subtotal: $104.98
+Tax (10%): $10.50
+Total:    $115.48
+
+Status: Shipped / Delivered

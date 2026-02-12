@@ -1,0 +1,14 @@
+INVOICE #INV-2025-004
+Date: 2025-12-10
+
+Bill To: Carol White, San Francisco
+
+Items:
+  1x Wireless Mouse          $29.99
+  5x Notebook (A5)           $62.50
+
+Subtotal:  $92.49
+Tax (10%):  $9.25
+Total:    $101.74
+
+Status: Pending / Shipped

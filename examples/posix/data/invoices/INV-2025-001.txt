@@ -1,0 +1,13 @@
+INVOICE #INV-2025-001
+Date: 2025-12-01
+
+Bill To: Alice Johnson, Seattle
+
+Items:
+  1x Wireless Mouse          $29.99
+
+Subtotal:  $29.99
+Tax (10%):  $3.00
+Total:     $32.99
+
+Status: Shipped

@@ -1,0 +1,14 @@
+INVOICE #INV-2025-003
+Date: 2025-12-05
+
+Bill To: Bob Smith, Portland
+
+Items:
+  2x USB-C Hub               $90.00
+  3x Ballpoint Pen Pack      $17.97
+
+Subtotal: $107.97
+Tax (10%): $10.80
+Total:    $118.77
+
+Status: Shipped / Delivered

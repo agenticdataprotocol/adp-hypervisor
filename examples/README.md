@@ -1,10 +1,10 @@
 # ADP Hypervisor Examples
 
 End-to-end examples demonstrating ADP Hypervisor with different backends.
-A shared `docker-compose.yml` manages all backend infrastructure, and a
+A shared `docker-compose.yml` manages all database infrastructure, and a
 unified `conf/` directory configures every backend in one place. Each
-backend sub-directory contains only Docker initialization files (seed data,
-schema scripts, etc.).
+backend sub-directory contains only initialization files (seed data,
+schema scripts, sample files, etc.).
 
 ## Prerequisites
 
@@ -33,9 +33,13 @@ examples/
 ├── pgvector/               # Docker init for pgvector
 │   └── init/
 │       └── 01-init.sql
-└── mongodb/                # Docker init for MongoDB
-    └── init/
-        └── 01-init.js
+├── mongodb/                # Docker init for MongoDB
+│   └── init/
+│       └── 01-init.js
+└── posix/                  # Sample files for POSIX filesystem backend
+    └── data/
+        ├── products/       # Product description text files (6 files)
+        └── invoices/       # Invoice text files (5 files)
 ```
 
 ## Available Backends
@@ -45,6 +49,7 @@ examples/
 | PostgreSQL | `postgres` | `postgres/`    |
 | pgvector   | `pgvector` | `pgvector/`    |
 | MongoDB    | `mongodb`  | `mongodb/`     |
+| POSIX      | —          | `posix/`       |
 
 ## Quick Start
 
@@ -86,9 +91,10 @@ Expected: the response contains `serverInfo` with `name: "adp-hypervisor"` and
 {"jsonrpc":"2.0","id":2,"method":"adp.discover","params":{}}
 ```
 
-Expected: `resources` array with seven entries — `pg_demo:customers`,
+Expected: `resources` array with nine entries — `pg_demo:customers`,
 `pg_demo:products`, `pg_demo:orders`, `pgvector_demo:documents`,
-`mongo_demo:customers`, `mongo_demo:products`, and `mongo_demo:orders`.
+`mongo_demo:customers`, `mongo_demo:products`, `mongo_demo:orders`,
+`posix_demo:products`, and `posix_demo:invoices`.
 
 ---
 
@@ -203,6 +209,54 @@ Expected: a single result for Alice Johnson.
 
 Expected: all orders with `status = 'shipped'`, sorted by `ordered_at` descending.
 
+---
+
+#### POSIX Backend (Filesystem)
+
+The POSIX backend serves files directly from the local filesystem — no
+Docker container is required.
+
+##### Describe — Inspect a Resource Contract
+
+```json
+{"jsonrpc":"2.0","id":11,"method":"adp.describe","params":{"resourceId":"posix_demo:products","intentClass":"QUERY"}}
+```
+
+Expected: `usageContract` listing the fields (`name`, `object_type`,
+`content`, `content_format`) for the products directory.
+
+##### Execute QUERY — List Product Files
+
+```json
+{"jsonrpc":"2.0","id":12,"method":"adp.execute","params":{"resourceId":"posix_demo:products","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[]},"projections":["name","object_type"]}}}
+```
+
+Expected: six file entries (one per product text file in `posix/data/products/`).
+
+##### Execute LOOKUP — Read a Specific Product File
+
+```json
+{"jsonrpc":"2.0","id":13,"method":"adp.execute","params":{"resourceId":"posix_demo:products","intent":{"intentClass":"LOOKUP","key":{"fieldId":"file_name","op":"EQ","value":"wireless-mouse.txt"},"projections":["file_name","content","content_format"]}}}
+```
+
+Expected: file content of `wireless-mouse.txt` with `content_format: "raw"`.
+
+##### Execute QUERY — Read a Single File's Content
+
+```json
+{"jsonrpc":"2.0","id":14,"method":"adp.execute","params":{"resourceId":"posix_demo:invoices","intent":{"intentClass":"QUERY","predicates":{"op":"AND","predicates":[]},"projections":["name","content"]}}}
+```
+
+Expected: five invoice file entries from `posix/data/invoices/`.
+
+##### Execute LOOKUP — Read an Invoice File
+
+```json
+{"jsonrpc":"2.0","id":15,"method":"adp.execute","params":{"resourceId":"posix_demo:invoices","intent":{"intentClass":"LOOKUP","key":{"fieldId":"file_name","op":"EQ","value":"INV-2025-001.txt"},"projections":["file_name","content"]}}}
+```
+
+Expected: content of invoice `INV-2025-001.txt` (Alice Johnson, Wireless Mouse).
+
 ### 5. Cleanup
 
 ```bash
@@ -240,3 +294,12 @@ The `mongodb/init/01-init.js` script creates an `adp_demo` database with:
 | `customers` | 5         | Customer profiles      |
 | `products`  | 6         | Product catalog        |
 | `orders`    | 10        | Customer order records |
+
+### POSIX
+
+The `posix/data/` directory contains plain text files for the filesystem backend:
+
+| Directory   | Files | Description                                   |
+|:------------|:------|:----------------------------------------------|
+| `products/` | 6     | Product descriptions (matching the DB catalog) |
+| `invoices/` | 5     | Sample invoices for customer orders            |
