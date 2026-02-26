@@ -79,7 +79,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2,0.3]", top=5),
+                        value=SimilarValue(vector=[0.1, 0.2, 0.3], top=5),
                     ),
                 ],
             ),
@@ -99,7 +99,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[1.0,2.0]", top=3, distance_function="L2"),
+                        value=SimilarValue(vector=[1.0, 2.0], top=3, distance_function="L2"),
                     ),
                 ],
             ),
@@ -119,7 +119,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
                         value=SimilarValue(
-                            text="[1.0,2.0]", top=3, distance_function="INNER_PRODUCT"
+                            vector=[1.0, 2.0], top=3, distance_function="INNER_PRODUCT"
                         ),
                     ),
                 ],
@@ -137,7 +137,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]", top=10, threshold=0.5),
+                        value=SimilarValue(vector=[0.1, 0.2], top=10, threshold=0.5),
                     ),
                 ],
             ),
@@ -160,7 +160,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]", top=5),
+                        value=SimilarValue(vector=[0.1, 0.2], top=5),
                     ),
                 ],
             ),
@@ -180,7 +180,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]", top=5),
+                        value=SimilarValue(vector=[0.1, 0.2], top=5),
                     ),
                 ],
             ),
@@ -199,7 +199,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]"),
+                        value=SimilarValue(vector=[0.1, 0.2]),
                     ),
                 ],
             ),
@@ -217,7 +217,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1]", top=5),
+                        value=SimilarValue(vector=[0.1], top=5),
                     ),
                 ],
             ),
@@ -243,7 +243,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SimilarValue"):
             self.backend._build_query_sql("documents", intent)
 
-    def test_similar_value_without_text(self) -> None:
+    def test_similar_value_without_vector(self) -> None:
         intent = QueryIntent(
             resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
@@ -257,7 +257,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                 ],
             ),
         )
-        with self.assertRaisesRegex(ValueError, "text must be set"):
+        with self.assertRaisesRegex(ValueError, "vector must be set"):
             self.backend._build_query_sql("documents", intent)
 
     def test_unsupported_distance_function(self) -> None:
@@ -274,7 +274,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]", top=5),
+                        value=SimilarValue(vector=[0.1, 0.2], top=5),
                     ),
                 ],
             ),
@@ -291,12 +291,12 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="text_embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2]", top=5),
+                        value=SimilarValue(vector=[0.1, 0.2], top=5),
                     ),
                     Predicate(
                         field_id="image_embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.3,0.4]", top=5),
+                        value=SimilarValue(vector=[0.3, 0.4], top=5),
                     ),
                 ],
             ),
@@ -316,12 +316,12 @@ class TestSimilarSQLGeneration(unittest.TestCase):
                     Predicate(
                         field_id="text_embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1]", top=5),
+                        value=SimilarValue(vector=[0.1], top=5),
                     ),
                     Predicate(
                         field_id="image_embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.2]", top=10),
+                        value=SimilarValue(vector=[0.2], top=10),
                     ),
                 ],
             ),
@@ -404,7 +404,7 @@ class TestExtractSimilar(unittest.TestCase):
         similar = Predicate(
             field_id="embedding",
             op=PredicateOperator.SIMILAR,
-            value=SimilarValue(text="[0.1]"),
+            value=SimilarValue(vector=[0.1]),
         )
         other = Predicate(field_id="name", op=PredicateOperator.EQ, value="Alice")
         group = PredicateGroup(op="AND", predicates=[other, similar])
@@ -427,12 +427,12 @@ class TestExtractSimilar(unittest.TestCase):
         sim1 = Predicate(
             field_id="text_embedding",
             op=PredicateOperator.SIMILAR,
-            value=SimilarValue(text="[0.1]"),
+            value=SimilarValue(vector=[0.1]),
         )
         sim2 = Predicate(
             field_id="image_embedding",
             op=PredicateOperator.SIMILAR,
-            value=SimilarValue(text="[0.2]"),
+            value=SimilarValue(vector=[0.2]),
         )
         other = Predicate(field_id="name", op=PredicateOperator.EQ, value="Alice")
         group = PredicateGroup(op="AND", predicates=[sim1, other, sim2])

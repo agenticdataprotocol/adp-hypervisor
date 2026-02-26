@@ -116,7 +116,8 @@ class VectorBackend(RDBMSBackend):
         # Threshold filters and ORDER BY parts for each SIMILAR predicate
         order_parts: list[str] = []
         for pred, sv in zip(similar_preds, similar_values, strict=True):
-            params.append(sv.text)
+            assert sv.vector is not None  # guaranteed by _parse_similar_value
+            params.append(self._format_vector(sv.vector))
             vector_ph = self.placeholder(len(params))
 
             col = self.quote_identifier(pred.field_id)
@@ -193,12 +194,17 @@ class VectorBackend(RDBMSBackend):
 
         Raises:
             ValueError: If the predicate value is not a ``SimilarValue`` or
-                has no ``text`` field set.
+                has no ``vector`` field set.
         """
         if not isinstance(pred.value, SimilarValue):
             raise ValueError(
                 f"SIMILAR predicate requires a SimilarValue, got {type(pred.value).__name__}"
             )
-        if pred.value.text is None:
-            raise ValueError("SimilarValue.text must be set for vector similarity search")
+        if pred.value.vector is None:
+            raise ValueError("SimilarValue.vector must be set for vector similarity search")
         return pred.value
+
+    @staticmethod
+    def _format_vector(vector: list[float]) -> str:
+        """Format a float list as a pgvector literal string, e.g. ``'[0.1,0.2,0.3]'``."""
+        return "[" + ",".join(str(v) for v in vector) + "]"

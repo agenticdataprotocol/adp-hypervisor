@@ -206,14 +206,27 @@ class TestPredicateTypes(unittest.TestCase):
     """Tests for predicate types."""
 
     def test_similar_value(self) -> None:
-        similar = SimilarValue(text="hello world", top=10, threshold=0.8)
-        self.assertEqual(similar.text, "hello world")
+        similar = SimilarValue(vector=[0.1, 0.2, 0.3], top=10, threshold=0.8)
+        self.assertEqual(similar.vector, [0.1, 0.2, 0.3])
         self.assertEqual(similar.top, 10)
         self.assertEqual(similar.threshold, 0.8)
 
     def test_similar_value_with_distance_function(self) -> None:
-        similar = SimilarValue.model_validate({"text": "query", "distanceFunction": "COSINE"})
+        similar = SimilarValue.model_validate({"vector": [0.1, 0.2], "distanceFunction": "COSINE"})
         self.assertEqual(similar.distance_function, "COSINE")
+
+    def test_similar_value_text_not_yet_supported(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "not yet supported"):
+            SimilarValue(text="hello world", top=5)
+
+    def test_similar_value_text_and_vector_mutually_exclusive(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "mutually exclusive"):
+            SimilarValue(text="hello", vector=[0.1], top=5)
+
+    def test_similar_value_neither_text_nor_vector_is_allowed(self) -> None:
+        sv = SimilarValue(top=5)
+        self.assertIsNone(sv.text)
+        self.assertIsNone(sv.vector)
 
     def test_predicate(self) -> None:
         pred = Predicate.model_validate({"fieldId": "name", "op": "EQ", "value": "John"})

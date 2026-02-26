@@ -177,7 +177,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2,0.3]", top=3),
+                        value=SimilarValue(vector=[0.1, 0.2, 0.3], top=3),
                     ),
                 ],
             ),
@@ -202,7 +202,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.1,0.2,0.3]", top=10),
+                        value=SimilarValue(vector=[0.1, 0.2, 0.3], top=10),
                     ),
                 ],
             ),
@@ -222,7 +222,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.9,0.8,0.7]", top=2, distance_function="L2"),
+                        value=SimilarValue(vector=[0.9, 0.8, 0.7], top=2, distance_function="L2"),
                     ),
                 ],
             ),
@@ -241,7 +241,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                     Predicate(
                         field_id="embedding",
                         op=PredicateOperator.SIMILAR,
-                        value=SimilarValue(text="[0.5,0.5,0.5]", top=1),
+                        value=SimilarValue(vector=[0.5, 0.5, 0.5], top=1),
                     ),
                 ],
             ),

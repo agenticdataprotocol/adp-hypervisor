@@ -8,7 +8,7 @@ based on the JSON-RPC 2.0 protocol specification.
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import Field as PydanticField
 from pydantic.alias_generators import to_camel
 
@@ -190,11 +190,18 @@ class ValidationIssueCode(StrEnum):
 class SimilarValue(ADPModel):
     """Structured value for SIMILAR operator (vector similarity search)."""
 
+    # TODO: Support text-based similarity search once embedding strategy is decided.
+    #  When implemented, the backend should convert text to a vector via an embedding
+    #  model before executing the similarity query.
     text: str | None = PydanticField(
         default=None, description="Text content to search for similarity"
     )
     blob: str | None = PydanticField(
         default=None, description="Binary content as Base64 or URI reference"
+    )
+    vector: list[float] | None = PydanticField(
+        default=None,
+        description="Pre-computed embedding vector for direct vector similarity search",
     )
     top: int | None = PydanticField(default=None, description="Maximum number of results to return")
     threshold: float | None = PydanticField(
@@ -204,6 +211,17 @@ class SimilarValue(ADPModel):
         default=None,
         description="Distance function (e.g., COSINE, L2, INNER_PRODUCT)",
     )
+
+    @model_validator(mode="after")
+    def _check_text_vector_exclusivity(self) -> "SimilarValue":
+        if self.text is not None and self.vector is not None:
+            raise ValueError("'text' and 'vector' are mutually exclusive in SimilarValue")
+        if self.text is not None:
+            raise ValueError(
+                "SimilarValue.text is not yet supported. "
+                "Use 'vector' with a pre-computed embedding instead."
+            )
+        return self
 
 
 PredicateValue = str | int | float | bool | list[str | int | float | bool] | SimilarValue
