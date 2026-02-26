@@ -116,7 +116,6 @@ def _get_operators_for_field(field_type: FieldType | None) -> list[PredicateOper
 
 def _get_mandatory_field_ids(manifest_index: ManifestIndex, resource_id: str) -> set[str]:
     """Get field IDs that have MANDATORY_FILTER policy rules."""
-    from adp_hypervisor.manifest.policy import MandatoryFilterPolicy
 
     policies = manifest_index.get_mandatory_filter_policies(resource_id)
     return {p.field_id for p in policies}

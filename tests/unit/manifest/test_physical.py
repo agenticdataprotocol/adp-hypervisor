@@ -280,6 +280,4 @@ class TestPhysicalManifest(unittest.TestCase):
             },
         )
         providers = [b.provider for b in manifest.backends]
-        self.assertEqual(
-            set(providers), {"postgresql", "pinecone", "s3", "mongodb", "neo4j"}
-        )
+        self.assertEqual(set(providers), {"postgresql", "pinecone", "s3", "mongodb", "neo4j"})

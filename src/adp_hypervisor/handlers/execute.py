@@ -100,9 +100,7 @@ class ExecuteHandler(Handler):
                 resource.backend_id,
                 exc_info=True,
             )
-            raise ExecutionFailedError(
-                f"Execution failed for resource {resource_id!r}"
-            ) from exc
+            raise ExecutionFailedError(f"Execution failed for resource {resource_id!r}") from exc
         duration_ms = int((time.monotonic() - start_s) * 1000)
 
         # TODO: Implement cursor-based pagination. Currently next_cursor is always None.

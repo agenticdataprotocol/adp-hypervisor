@@ -163,9 +163,7 @@ class ManifestIndex:
         result.extend(self._access_policies)
         return result
 
-    def get_mandatory_filter_policies(
-        self, resource_id: str
-    ) -> list[MandatoryFilterPolicy]:
+    def get_mandatory_filter_policies(self, resource_id: str) -> list[MandatoryFilterPolicy]:
         """Return all MANDATORY_FILTER policies for an exact resource_id."""
         self._ensure_indexes()
         return list(self._mandatory_filters.get(resource_id, []))

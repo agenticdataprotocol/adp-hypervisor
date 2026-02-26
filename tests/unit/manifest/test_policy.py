@@ -203,9 +203,7 @@ class TestAccessPolicy(unittest.TestCase):
     def test_roles_required(self) -> None:
         """roles is required; omitting it raises a validation error."""
         with self.assertRaises(ValueError):
-            AccessPolicy.model_validate(
-                {"type": "ACCESS", "resourceSelector": "com.acme:res"}
-            )
+            AccessPolicy.model_validate({"type": "ACCESS", "resourceSelector": "com.acme:res"})
 
 
 # =============================================================================

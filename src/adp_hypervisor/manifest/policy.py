@@ -47,9 +47,7 @@ class MandatoryFilterPolicy(ADPModel):
     resource's schema.
     """
 
-    type: Literal["MANDATORY_FILTER"] = PydanticField(
-        ..., description="Type of policy rule"
-    )
+    type: Literal["MANDATORY_FILTER"] = PydanticField(..., description="Type of policy rule")
     resource_id: ResourceId = PydanticField(
         ...,
         description=(
