@@ -10,7 +10,11 @@ from adp_hypervisor.manifest.physical import (
     S3BackendConfig,
     VectorBackendConfig,
 )
-from adp_hypervisor.manifest.policy import MandatoryFilterRule, OperationalRule
+from adp_hypervisor.manifest.policy import (
+    AccessPolicy,
+    MandatoryFilterPolicy,
+    OperationalPolicy,
+)
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -207,47 +211,49 @@ class TestYamlManifestProviderPolicies(unittest.TestCase):
         policies = index.list_policies()
         self.assertEqual(len(policies), 4)
 
-    def test_get_policy_exact(self) -> None:
+    def test_get_access_policy_exact(self) -> None:
         index = _make_index()
-        policy = index.get_policy("com.acme.finance:bank_failures")
+        policy = index.get_access_policy("com.acme.finance:bank_failures")
         self.assertIsNotNone(policy)
-        self.assertIsNotNone(policy.rules)
-        self.assertEqual(len(policy.rules), 2)
-        self.assertIsInstance(policy.rules[0], MandatoryFilterRule)
-        self.assertIsInstance(policy.rules[1], OperationalRule)
+        self.assertIsInstance(policy, AccessPolicy)
+        self.assertEqual(policy.resource_selector, "com.acme.finance:bank_failures")
+        self.assertEqual(len(policy.roles), 2)
+        roles = {r.role for r in policy.roles}
+        self.assertIn("admin", roles)
+        self.assertIn("user", roles)
 
-    def test_get_policy_wildcard_match(self) -> None:
+    def test_get_access_policy_wildcard_match(self) -> None:
         index = _make_index()
         # "com.acme.finance:unknown" should match the wildcard "com.acme.finance:*"
-        policy = index.get_policy("com.acme.finance:unknown")
+        policy = index.get_access_policy("com.acme.finance:unknown")
         self.assertIsNotNone(policy)
-        self.assertEqual(policy.resource_id, "com.acme.finance:*")
+        self.assertIsInstance(policy, AccessPolicy)
+        self.assertEqual(policy.resource_selector, "com.acme.finance:*")
 
-    def test_get_policy_not_found(self) -> None:
+    def test_get_access_policy_not_found(self) -> None:
         index = _make_index()
-        self.assertIsNone(index.get_policy("com.other:something"))
+        self.assertIsNone(index.get_access_policy("com.other:something"))
 
-    def test_policy_mandatory_filter_details(self) -> None:
+    def test_mandatory_filter_details(self) -> None:
         index = _make_index()
-        policy = index.get_policy("com.acme.finance:bank_failures")
+        policies = index.get_mandatory_filter_policies("com.acme.finance:bank_failures")
+        self.assertEqual(len(policies), 1)
+        policy = policies[0]
+        self.assertIsInstance(policy, MandatoryFilterPolicy)
+        self.assertEqual(policy.field_id, "closing_date")
+        self.assertEqual(policy.op, "GT")
+        self.assertEqual(policy.value, "2020-01-01")
+        self.assertEqual(policy.condition, "agent_tier == 'PRODUCTION'")
+
+    def test_operational_details(self) -> None:
+        index = _make_index()
+        policy = index.get_operational_policy("com.acme.finance:bank_failures")
         self.assertIsNotNone(policy)
-        rule = policy.rules[0]  # type: ignore[index]
-        self.assertIsInstance(rule, MandatoryFilterRule)
-        self.assertEqual(rule.field_id, "closing_date")
-        self.assertEqual(rule.op, "GT")
-        self.assertEqual(rule.value, "2020-01-01")
-        self.assertEqual(rule.condition, "agent_tier == 'PRODUCTION'")
-
-    def test_policy_operational_details(self) -> None:
-        index = _make_index()
-        policy = index.get_policy("com.acme.finance:bank_failures")
-        self.assertIsNotNone(policy)
-        rule = policy.rules[1]  # type: ignore[index]
-        self.assertIsInstance(rule, OperationalRule)
-        self.assertEqual(rule.enforce_limit, 100)
-        self.assertIsNotNone(rule.default_order_by)
-        self.assertEqual(rule.default_order_by.field_id, "closing_date")
-        self.assertEqual(rule.default_order_by.direction, "DESC")
+        self.assertIsInstance(policy, OperationalPolicy)
+        self.assertEqual(policy.enforce_limit, 100)
+        self.assertIsNotNone(policy.default_order_by)
+        self.assertEqual(policy.default_order_by.field_id, "closing_date")
+        self.assertEqual(policy.default_order_by.direction, "DESC")
 
 
 # =============================================================================
@@ -256,14 +262,18 @@ class TestYamlManifestProviderPolicies(unittest.TestCase):
 
 
 class TestYamlManifestProviderBootstrap(unittest.TestCase):
-    def test_bootstrap_policy_no_policies(self) -> None:
+    def test_bootstrap_policy_has_catchall_access(self) -> None:
         bootstrap_provider = _make_bootstrap_provider()
         manifest = bootstrap_provider.get_policy_manifest()
-        self.assertIsNone(manifest.policies)
+        self.assertIsNotNone(manifest.policies)
+        self.assertEqual(len(manifest.policies), 1)  # type: ignore[arg-type]
+        policy = manifest.policies[0]  # type: ignore[index]
+        self.assertIsInstance(policy, AccessPolicy)
+        self.assertEqual(policy.resource_selector, "*")
 
-    def test_bootstrap_list_policies_empty(self) -> None:
+    def test_bootstrap_list_policies_has_one_entry(self) -> None:
         index = _make_bootstrap_index()
-        self.assertEqual(index.list_policies(), [])
+        self.assertEqual(len(index.list_policies()), 1)
 
     def test_bootstrap_backends_still_loaded(self) -> None:
         index = _make_bootstrap_index()

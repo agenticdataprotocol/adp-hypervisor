@@ -29,7 +29,7 @@ class FakeBackend(Backend):
     async def disconnect(self) -> None:
         self.disconnected = True
 
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         return BackendResult(rows=[])
 
 
@@ -44,6 +44,7 @@ def _make_backend(backend_id: str = "db1", *, fail_connect: bool = False) -> Fak
     defn = BackendDefinition(
         id=backend_id,
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri="postgresql://localhost/test"),
     )
     return FakeBackend(defn, fail_connect=fail_connect)
@@ -141,6 +142,7 @@ class TestLifecycle(unittest.IsolatedAsyncioTestCase):
         defn = BackendDefinition(
             id="fail_db",
             type=BackendType.RDBMS,
+            provider="postgresql",
             config=RDBMSBackendConfig(uri="postgresql://localhost/test"),
         )
         fail_backend = FailDisconnectBackend(defn)

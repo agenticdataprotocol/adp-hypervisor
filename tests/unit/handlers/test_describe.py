@@ -11,7 +11,7 @@ from adp_hypervisor.handlers.describe import (
     _get_operators_for_field,
 )
 from adp_hypervisor.manifest.index import ManifestIndex
-from adp_hypervisor.manifest.policy import MandatoryFilterRule, OperationalRule, ResourcePolicy
+from adp_hypervisor.manifest.policy import MandatoryFilterPolicy
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
 from adp_hypervisor.protocol.errors import InvalidParamsError, ResourceNotFoundError
 from adp_hypervisor.protocol.types import (
@@ -51,11 +51,11 @@ def _make_resource(
 
 def _mock_manifest(
     resource: CuratedResource | None = None,
-    policy: ResourcePolicy | None = None,
+    mandatory_filters: list[MandatoryFilterPolicy] | None = None,
 ) -> ManifestIndex:
     index = MagicMock(spec=ManifestIndex)
     index.get_resource.return_value = resource
-    index.get_policy.return_value = policy
+    index.get_mandatory_filter_policies.return_value = mandatory_filters or []
     return index
 
 
@@ -382,15 +382,11 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
     # NOTE: Policy enforcement is disabled until the policy spec is finalized.
     # All predicates are OPTIONAL regardless of policy rules.
 
-    async def test_operational_rule_does_not_affect_predicates(self) -> None:
+    async def test_operational_policy_does_not_affect_predicates(self) -> None:
+        """OPERATIONAL policy has no effect on predicate usage (all remain OPTIONAL)."""
         resource = _make_resource()
-        policy = ResourcePolicy(
-            resource_id="com.acme:test_resource",
-            rules=[
-                OperationalRule(type="OPERATIONAL", enforce_limit=100),
-            ],
-        )
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
+        # No mandatory filters — only operational policy in this test
+        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -400,7 +396,7 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_policy_all_predicates_optional(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource, policy=None))
+        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -408,15 +404,19 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
         for pred in predicates:
             self.assertEqual(pred["usage"], "OPTIONAL")
 
-    async def test_write_intent_ignores_policy(self) -> None:
+    async def test_write_intent_ignores_mandatory_filter(self) -> None:
+        """MANDATORY_FILTER policy has no effect on write (INGEST) capability output."""
         resource = _make_resource(intent_classes=["INGEST"])
-        policy = ResourcePolicy(
+        mf_policy = MandatoryFilterPolicy(
+            type="MANDATORY_FILTER",
             resource_id="com.acme:test_resource",
-            rules=[
-                MandatoryFilterRule(type="MANDATORY_FILTER", field_id="id", op="EQ", value="v"),
-            ],
+            field_id="id",
+            op="EQ",
+            value="v",
         )
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource, policy=policy))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource, mandatory_filters=[mf_policy])
+        )
         result = await handler.handle(_make_params(intent_class="INGEST"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)

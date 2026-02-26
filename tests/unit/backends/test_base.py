@@ -5,9 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from adp_hypervisor.manifest.physical import BackendDefinition, BackendType, RDBMSBackendConfig
-from adp_hypervisor.protocol.types import (
-    Intent,
-)
+from adp_hypervisor.protocol.types import Intent
 from backends.base import Backend, BackendResult
 
 # =============================================================================
@@ -29,7 +27,7 @@ class StubBackend(Backend):
     async def disconnect(self) -> None:
         self.disconnected = True
 
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         return BackendResult(rows=[{"id": 1, "name": "test"}])
 
 
@@ -37,6 +35,7 @@ def _make_definition(backend_id: str = "test_db") -> BackendDefinition:
     return BackendDefinition(
         id=backend_id,
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri="postgresql://localhost/test"),
     )
 
@@ -106,6 +105,6 @@ class TestStubBackendLifecycle(unittest.IsolatedAsyncioTestCase):
 
     async def test_execute(self) -> None:
         mock_intent: Any = MagicMock()
-        result = await self.backend.execute("users", mock_intent)
+        result = await self.backend.execute(mock_intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "test")

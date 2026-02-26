@@ -87,6 +87,7 @@ def _write_manifest_files(tmpdir: Path, dsn: str) -> None:
             {
                 "id": "test_pg",
                 "type": "RDBMS",
+                "provider": "postgresql",
                 "config": {"type": "RDBMS", "uri": dsn},
             }
         ],
@@ -283,9 +284,9 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         req = _jsonrpc_request(
             "adp.validate",
             {
-                "resourceId": "com.test:users",
                 "intent": {
                     "intentClass": "QUERY",
+                    "resourceId": "com.test:users",
                     "predicates": {
                         "op": "AND",
                         "predicates": [
@@ -307,9 +308,9 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         req = _jsonrpc_request(
             "adp.execute",
             {
-                "resourceId": "com.test:users",
                 "intent": {
                     "intentClass": "QUERY",
+                    "resourceId": "com.test:users",
                     "predicates": {
                         "op": "AND",
                         "predicates": [
@@ -331,9 +332,9 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         req = _jsonrpc_request(
             "adp.execute",
             {
-                "resourceId": "com.test:users",
                 "intent": {
                     "intentClass": "LOOKUP",
+                    "resourceId": "com.test:users",
                     "key": {"fieldId": "id", "value": 1},
                 },
             },
@@ -367,9 +368,9 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
             _jsonrpc_request(
                 "adp.execute",
                 {
-                    "resourceId": "com.test:users",
                     "intent": {
                         "intentClass": "QUERY",
+                        "resourceId": "com.test:users",
                         "predicates": {
                             "op": "AND",
                             "predicates": [

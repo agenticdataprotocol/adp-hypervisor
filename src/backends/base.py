@@ -66,11 +66,10 @@ class Backend(ABC):
         """Close the connection and release resources."""
 
     @abstractmethod
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         """Execute an intent against the data source.
 
         Args:
-            source: The source identifier.
             intent: The intent to execute.
 
         Returns:

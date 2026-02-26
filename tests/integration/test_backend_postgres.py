@@ -8,11 +8,13 @@ import unittest
 
 from testcontainers.postgres import PostgresContainer
 
+from adp_hypervisor.manifest.index import set_global_manifest_index
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendType,
     RDBMSBackendConfig,
 )
+from adp_hypervisor.manifest.semantic import CuratedResource
 from adp_hypervisor.protocol.types import (
     IdentityPredicate,
     IngestIntent,
@@ -29,6 +31,8 @@ from backends.rdbms.postgres import PostgresBackend
 # =============================================================================
 # Module-level fixtures
 # =============================================================================
+
+_RESOURCE_ID = "test:users"
 
 _TABLE_DDL = """
 CREATE TABLE users (
@@ -59,8 +63,11 @@ def setUpModule() -> None:
     _backend_definition = BackendDefinition(
         id="test_pg",
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri=dsn),
     )
+    # Configure a minimal global ManifestIndex stub for backend lookups.
+    set_global_manifest_index(_TestManifestIndex())
 
 
 def tearDownModule() -> None:
@@ -81,6 +88,34 @@ def _get_backend_definition() -> BackendDefinition:
     if _backend_definition is None:
         raise RuntimeError("setUpModule was not called")
     return _backend_definition
+
+
+def _make_resource() -> CuratedResource:
+    """Return a minimal CuratedResource bound to the users table."""
+    backend_def = _get_backend_definition()
+    return CuratedResource.model_validate(
+        {
+            "resourceId": _RESOURCE_ID,
+            "intentClasses": ["*"],
+            "backendId": backend_def.id,
+            "version": 1,
+            "sourceDefinition": {
+                "source": "users",
+            },
+        }
+    )
+
+
+class _TestManifestIndex:
+    """Minimal stub manifest index exposing get_resource for this test module."""
+
+    def __init__(self) -> None:
+        self._resource = _make_resource()
+
+    def get_resource(self, resource_id: str) -> CuratedResource | None:
+        if resource_id == self._resource.resource_id:
+            return self._resource
+        return None
 
 
 class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
@@ -126,27 +161,30 @@ class TestConnection(unittest.IsolatedAsyncioTestCase):
 class TestLookupIntent(_SeededBackendMixin):
     async def test_lookup_by_id(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=1),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
 
     async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=2),
             projections=["name"],
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertNotIn("age", result.rows[0])
 
     async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=999),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 0)
 
 
@@ -158,6 +196,7 @@ class TestLookupIntent(_SeededBackendMixin):
 class TestQueryIntent(_SeededBackendMixin):
     async def test_query_all(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -165,11 +204,12 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 3)
 
     async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -177,13 +217,14 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_with_order_and_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -193,13 +234,14 @@ class TestQueryIntent(_SeededBackendMixin):
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=2,
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertEqual(result.rows[1]["name"], "Alice")
 
     async def test_query_with_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -208,7 +250,7 @@ class TestQueryIntent(_SeededBackendMixin):
             ),
             projections=["name", "age"],
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Charlie")
         self.assertEqual(result.rows[0]["age"], 35)
@@ -216,6 +258,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -223,11 +266,12 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
 
     async def test_query_in_empty_list_raises(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -236,10 +280,11 @@ class TestQueryIntent(_SeededBackendMixin):
             ),
         )
         with self.assertRaisesRegex(ValueError, "non-empty list"):
-            await self.backend.execute("users", intent)
+            await self.backend.execute(intent)
 
     async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -247,13 +292,14 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_or_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="OR",
                 predicates=[
@@ -262,13 +308,14 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_nested_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -283,7 +330,7 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Bob"})
@@ -296,12 +343,13 @@ class TestQueryIntent(_SeededBackendMixin):
 
 class TestUnsupportedIntents(_SeededBackendMixin):
     async def test_ingest_not_supported(self) -> None:
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
-            await self.backend.execute("users", intent)
+            await self.backend.execute(intent)
 
     async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -311,4 +359,4 @@ class TestUnsupportedIntents(_SeededBackendMixin):
             payload={"name": "Updated"},
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
-            await self.backend.execute("users", intent)
+            await self.backend.execute(intent)

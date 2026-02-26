@@ -23,10 +23,14 @@ from backends.rdbms.postgres import _inject_password
 # =============================================================================
 
 
+_RID = "com.acme:test"  # dummy resource_id for all intent constructors in this file
+
+
 def _make_definition() -> BackendDefinition:
     return BackendDefinition(
         id="test_rdbms",
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri="postgresql://localhost/test"),
     )
 
@@ -77,13 +81,14 @@ class TestBuildLookupSQL(unittest.TestCase):
         self.backend = _StubRDBMSBackend(definition=_make_definition())
 
     def test_basic_lookup(self) -> None:
-        intent = LookupIntent(key=IdentityPredicate(field_id="id", value=42))
+        intent = LookupIntent(resource_id=_RID, key=IdentityPredicate(field_id="id", value=42))
         sql, params = self.backend._build_lookup_sql("users", intent)
         self.assertEqual(sql, 'SELECT * FROM "users" WHERE "id" = $1')
         self.assertEqual(params, [42])
 
     def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
+            resource_id=_RID,
             key=IdentityPredicate(field_id="id", value=1),
             projections=["name", "age"],
         )
@@ -103,6 +108,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_single_eq_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="status", op=PredicateOperator.EQ, value="active")],
@@ -114,6 +120,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_gt_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="age", op=PredicateOperator.GT, value=18)],
@@ -125,6 +132,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_multiple_predicates_and(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -139,6 +147,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_neq_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -152,6 +161,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_lt_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="score", op=PredicateOperator.LT, value=50)],
@@ -163,6 +173,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_contains_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -176,6 +187,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_like_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -189,6 +201,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_ilike_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -202,6 +215,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_in_predicate(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -215,6 +229,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_nested_or_group(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -238,6 +253,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_with_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="age", op=PredicateOperator.GT, value=0)],
@@ -249,6 +265,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_with_order_by(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="age", op=PredicateOperator.GT, value=0)],
@@ -263,6 +280,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_with_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="age", op=PredicateOperator.GT, value=0)],
@@ -274,6 +292,7 @@ class TestBuildQuerySQL(unittest.TestCase):
 
     def test_combined_order_limit_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="active", op=PredicateOperator.EQ, value=True)],
@@ -322,13 +341,14 @@ class TestIntentToSQL(unittest.TestCase):
         self.backend = _StubRDBMSBackend(definition=_make_definition())
 
     def test_dispatch_lookup(self) -> None:
-        intent = LookupIntent(key=IdentityPredicate(field_id="id", value=1))
+        intent = LookupIntent(resource_id=_RID, key=IdentityPredicate(field_id="id", value=1))
         sql, params = self.backend._intent_to_sql("t", intent)
         self.assertIn("WHERE", sql)
         self.assertEqual(params, [1])
 
     def test_dispatch_query(self) -> None:
         intent = QueryIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="a", op=PredicateOperator.EQ, value=1)],
@@ -339,12 +359,13 @@ class TestIntentToSQL(unittest.TestCase):
         self.assertEqual(params, [1])
 
     def test_dispatch_ingest_raises(self) -> None:
-        intent = IngestIntent(payload=[{"k": "v"}])
+        intent = IngestIntent(resource_id=_RID, payload=[{"k": "v"}])
         with self.assertRaises(NotImplementedError):
             self.backend._intent_to_sql("t", intent)
 
     def test_dispatch_revise_raises(self) -> None:
         intent = ReviseIntent(
+            resource_id=_RID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[Predicate(field_id="id", op=PredicateOperator.EQ, value=1)],

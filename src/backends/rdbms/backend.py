@@ -10,6 +10,7 @@ import logging
 from abc import abstractmethod
 from typing import Any
 
+from adp_hypervisor.manifest.index import get_global_manifest_index
 from adp_hypervisor.manifest.physical import BackendDefinition
 from adp_hypervisor.protocol.types import (
     IngestIntent,
@@ -187,16 +188,19 @@ class RDBMSBackend(Backend):
     # Backend interface implementation
     # -------------------------------------------------------------------------
 
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         """Translate *intent* to SQL and execute it.
 
-        Args:
-            source: The source identifier (table name).
-            intent: The intent to execute.
-
-        Returns:
-            The execution result containing rows and optional metadata.
+        The backend resolves the concrete resource and source via the global
+        ManifestIndex using ``intent.resource_id``.
         """
+        manifest_index = get_global_manifest_index()
+        resource = manifest_index.get_resource(intent.resource_id)
+        if resource is None:
+            raise ValueError(f"Resource not found for intent.resource_id={intent.resource_id!r}")
+        source = resource.source_definition.source
+        if not source:
+            raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
         sql, params = self._intent_to_sql(source, intent)
         logger.debug("Executing SQL: %s | params=%s", sql, params)
         rows = await self.fetch_all(sql, params, source)

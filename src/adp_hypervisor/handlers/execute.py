@@ -79,29 +79,36 @@ class ExecuteHandler(Handler):
         """
         request = ExecuteRequestParams.model_validate(params)
 
-        resource = self._manifest_index.get_resource(request.resource_id)
+        resource_id = request.intent.resource_id
+        resource = self._manifest_index.get_resource(resource_id)
         if resource is None:
-            raise ResourceNotFoundError(f"Resource not found: {request.resource_id!r}")
+            raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
+
+        # Ensure the resource has a concrete source before executing.
+        # This keeps error semantics local to the handler and avoids
+        # backend-specific failures when the concrete source field is missing.
+        source = resource.source_definition.source
+        if not source:
+            raise ExecutionFailedError(
+                f"Resource {resource.resource_id!r} is missing source_definition.source"
+            )
 
         await self._validate_intent(params)
         # TODO: Enforce operational policy rules (e.g., enforce_limit) before execution.
 
         backend = self._resolve_backend(resource)
-        source = self._get_source(resource)
 
         start_s = time.monotonic()
         try:
-            result = await backend.execute(source, request.intent)
+            result = await backend.execute(request.intent)
         except Exception as exc:
             logger.error(
                 "Execution failed: resource=%s, backend=%s",
-                request.resource_id,
+                request.intent.resource_id,
                 resource.backend_id,
                 exc_info=True,
             )
-            raise ExecutionFailedError(
-                f"Execution failed for resource {request.resource_id!r}"
-            ) from exc
+            raise ExecutionFailedError(f"Execution failed for resource {resource_id!r}") from exc
         duration_ms = int((time.monotonic() - start_s) * 1000)
 
         # TODO: Implement cursor-based pagination. Currently next_cursor is always None.
@@ -110,7 +117,7 @@ class ExecuteHandler(Handler):
 
         logger.info(
             "Execute: resource=%s, intent_class=%s, rows=%d, duration_ms=%d",
-            request.resource_id,
+            resource_id,
             request.intent.intent_class,
             len(result.rows),
             duration_ms,
@@ -177,22 +184,3 @@ class ExecuteHandler(Handler):
                 f"Ensure the backend is registered before handling requests."
             )
         return backend
-
-    def _get_source(self, resource: CuratedResource) -> str:
-        """Extract the source identifier from a resource.
-
-        Args:
-            resource: The curated resource definition.
-
-        Returns:
-            The source identifier (e.g., table name).
-
-        Raises:
-            ExecutionFailedError: If the resource has no source definitions.
-        """
-        source = resource.source_definition.source
-        if not source:
-            raise ExecutionFailedError(
-                f"Resource {resource.resource_id!r} has no source definitions"
-            )
-        return source

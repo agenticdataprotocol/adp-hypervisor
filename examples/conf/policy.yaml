@@ -1,3 +1,43 @@
-# TODO: Policy enforcement is not yet supported. Add rules here once
-# the policy engine is implemented.
+# Policy Manifest — Demo Configuration
+#
+# Each policy specifies its own scope:
+#   - resourceId      for MANDATORY_FILTER and OPERATIONAL (exact resource only)
+#   - resourceSelector for ACCESS (exact ID or wildcard pattern)
+#
+# ACCESS is closed-by-default: a resource with no matching ACCESS rule rejects
+# all requests regardless of role or intent. The catch-all rule below opens
+# every resource to the "default" role for development convenience.
+# Replace it with resource-scoped rules for production deployments.
+# See policy-bootstrap.yaml for a minimal open-access example.
+#
 version: "1.0.0"
+
+policies:
+  # -----------------------------------------------------------------------
+  # ACCESS: catch-all rule — all demo resources open to the "default" role.
+  # Replace "*" with a narrower selector (e.g. "demo:*") in production.
+  # -----------------------------------------------------------------------
+  - type: "ACCESS"
+    resourceSelector: "*"
+    roles:
+      - role: "default"
+        allowedIntents: ["*"]
+
+  # -----------------------------------------------------------------------
+  # OPERATIONAL: limit result sets for the orders resource
+  # -----------------------------------------------------------------------
+  - type: "OPERATIONAL"
+    resourceId: "demo:orders"
+    enforceLimit: 1000
+    defaultOrderBy:
+      fieldId: "ordered_at"
+      direction: "DESC"
+
+  # -----------------------------------------------------------------------
+  # MANDATORY_FILTER: only return in-stock products by default
+  # -----------------------------------------------------------------------
+  - type: "MANDATORY_FILTER"
+    resourceId: "demo:products"
+    fieldId: "in_stock"
+    op: "EQ"
+    value: true
