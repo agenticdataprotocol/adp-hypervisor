@@ -330,6 +330,12 @@ class TestResourceSelectorValidation(unittest.TestCase):
         self.assertFalse(_is_valid_resource_selector("ns:*:extra"))
         self.assertFalse(_is_valid_resource_selector("ns:"))
         self.assertFalse(_is_valid_resource_selector(":name"))
+        self.assertFalse(_is_valid_resource_selector("a.b..*"))
+        self.assertFalse(_is_valid_resource_selector("..a.b.*"))
+        self.assertFalse(_is_valid_resource_selector(".ns:*"))
+        self.assertFalse(_is_valid_resource_selector("ns.:*"))
+        self.assertFalse(_is_valid_resource_selector("ns..sub:*"))
+        self.assertFalse(_is_valid_resource_selector("*.acme:*"))
 
 
 class TestConcreteResourceIdValidation(unittest.TestCase):
@@ -347,6 +353,14 @@ class TestConcreteResourceIdValidation(unittest.TestCase):
         self.assertFalse(_is_valid_concrete_resource_id("ns:"))
         self.assertFalse(_is_valid_concrete_resource_id(":name"))
         self.assertFalse(_is_valid_concrete_resource_id("a:b:c"))
+        self.assertFalse(_is_valid_concrete_resource_id("a..b:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("a.b.:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("..a.b:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("..:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id(".ns:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("ns.:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("ns..sub:abc"))
+        self.assertFalse(_is_valid_concrete_resource_id("com.acme:bad.name"))
 
 
 class TestManifestIndexResourceSelectorDefensive(unittest.TestCase):

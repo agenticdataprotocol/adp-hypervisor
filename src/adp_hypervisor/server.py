@@ -118,6 +118,11 @@ class ADPServer:
         await self._backend_registry.shutdown_all()
         await self._transport.stop()
 
+        # Clear the global ManifestIndex to avoid leaking it across server
+        # lifecycles within the same process (for example, in tests or when
+        # multiple servers are created sequentially).
+        set_global_manifest_index(None)
+
         logger.info("ADP Hypervisor server stopped")
 
     async def run(self) -> None:

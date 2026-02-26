@@ -19,6 +19,7 @@ and keep lookup logic here so it can be reused across different providers.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from fnmatch import fnmatch
 
@@ -33,6 +34,11 @@ from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.manifest.semantic import CuratedResource
 
 logger = logging.getLogger(__name__)
+
+
+# Namespace and ResourceId patterns
+_NAMESPACE_RE = re.compile(r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$")
+_RESOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*:[A-Za-z0-9_-]+$")
 
 
 def _is_valid_resource_selector(selector: str) -> bool:
@@ -54,15 +60,19 @@ def _is_valid_resource_selector(selector: str) -> bool:
     if "*" not in s:
         return _is_valid_concrete_resource_id(s)
     if s.endswith(":*"):
-        # namespace:* form – enforce exactly one colon and non-empty namespace.
+        # namespace:* form – enforce exactly one colon and valid namespace.
         if s.count("*") != 1:
             return False
         if s.count(":") != 1:
             return False
         namespace, wildcard = s.split(":", 1)
-        return bool(namespace.strip()) and wildcard == "*"
+        return bool(_NAMESPACE_RE.fullmatch(namespace)) and wildcard == "*"
     if s.endswith(".*"):
-        return s.count("*") == 1 and ":" not in s
+        if s.count("*") != 1 or ":" in s:
+            return False
+        # Strip the trailing ".*" and validate namespace segments.
+        namespace_prefix = s[:-2]
+        return bool(_NAMESPACE_RE.fullmatch(namespace_prefix))
     return False
 
 
@@ -76,10 +86,9 @@ def _is_valid_concrete_resource_id(resource_id: str) -> bool:
     s = resource_id.strip()
     if "*" in s:
         return False
-    if s.count(":") != 1:
-        return False
-    left, right = s.split(":", 1)
-    return bool(left.strip()) and bool(right.strip())
+    # Concrete ResourceId: namespace:name, where namespace matches _NAMESPACE_RE
+    # and name (alias) contains no dots.
+    return bool(_RESOURCE_ID_RE.fullmatch(s))
 
 
 class ManifestIndex:
@@ -162,7 +171,7 @@ class ManifestIndex:
     # Policies ---------------------------------------------------------
 
     def list_policies(self) -> list[Policy]:
-        """Return all policies (all types, in manifest order)."""
+        """Return all policies (all types)."""
         self._ensure_indexes()
         result: list[Policy] = []
         # Mandatory filters (grouped by resource_id, preserve per-resource order)
@@ -306,7 +315,7 @@ class ManifestIndex:
             return (0, 0)
         if s.endswith(":*"):
             return (2, 0)
-        namespace_part = s.rstrip(".*")
+        namespace_part = s[:-2]
         return (1, len(namespace_part))
 
     def _selector_matches(self, selector: str, resource_id: str) -> bool:
