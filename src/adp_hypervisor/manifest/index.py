@@ -54,7 +54,13 @@ def _is_valid_resource_selector(selector: str) -> bool:
     if "*" not in s:
         return _is_valid_concrete_resource_id(s)
     if s.endswith(":*"):
-        return s.count("*") == 1
+        # namespace:* form – enforce exactly one colon and non-empty namespace.
+        if s.count("*") != 1:
+            return False
+        if s.count(":") != 1:
+            return False
+        namespace, wildcard = s.split(":", 1)
+        return bool(namespace.strip()) and wildcard == "*"
     if s.endswith(".*"):
         return s.count("*") == 1 and ":" not in s
     return False
