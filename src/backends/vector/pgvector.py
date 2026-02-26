@@ -1,8 +1,8 @@
 """
 pgvector backend implementation.
 
-Uses asyncpg for async connection pooling and the pgvector PostgreSQL
-extension for vector similarity search.
+Combines RDBMS SQL translation with vector similarity search support via
+the pgvector PostgreSQL extension.  Uses asyncpg for async connection pooling.
 """
 
 import logging
@@ -12,14 +12,30 @@ from typing import Any
 import asyncpg
 
 from adp_hypervisor.manifest.physical import BackendDefinition, VectorBackendConfig
+from adp_hypervisor.protocol.types import QueryIntent
 from backends.credentials import CredentialResolutionError, resolve_credential
+from backends.rdbms.backend import RDBMSBackend
 from backends.vector.backend import VectorBackend
 
 logger = logging.getLogger(__name__)
 
+# Mapping from ADP distance function names to pgvector SQL operators.
+_DISTANCE_OP_MAP: dict[str, str] = {
+    "COSINE": "<=>",
+    "L2": "<->",
+    "INNER_PRODUCT": "<#>",
+}
 
-class PgVectorBackend(VectorBackend):
-    """pgvector backend using asyncpg connection pool."""
+_DEFAULT_DISTANCE_FUNCTION = "COSINE"
+
+
+class PgVectorBackend(RDBMSBackend, VectorBackend):
+    """pgvector backend using asyncpg connection pool.
+
+    Inherits SQL translation from ``RDBMSBackend`` and protocol-level vector
+    helpers from ``VectorBackend``.  Overrides ``_build_query_sql`` to handle
+    ``SIMILAR`` predicates via pgvector distance operators.
+    """
 
     def __init__(self, definition: BackendDefinition) -> None:
         super().__init__(definition)
@@ -67,8 +83,108 @@ class PgVectorBackend(VectorBackend):
         return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------
+    # pgvector hook methods
+    # ------------------------------------------------------------------
+
+    def distance_operator(self, distance_function: str | None) -> str:
+        """Return the pgvector SQL distance operator for the given function name.
+
+        Args:
+            distance_function: One of ``COSINE``, ``L2``, ``INNER_PRODUCT``,
+                or ``None`` (defaults to ``COSINE``).
+
+        Returns:
+            The SQL operator string (e.g., ``<=>``).
+
+        Raises:
+            ValueError: If the distance function is not supported.
+        """
+        fn = (distance_function or _DEFAULT_DISTANCE_FUNCTION).upper()
+        op = _DISTANCE_OP_MAP.get(fn)
+        if op is None:
+            raise ValueError(
+                f"Unsupported distance function: {fn!r}. "
+                f"Supported: {', '.join(_DISTANCE_OP_MAP)}"
+            )
+        return op
+
+    def cast_vector(self, placeholder: str) -> str:
+        """Wrap a parameter placeholder with a pgvector type cast.
+
+        Args:
+            placeholder: The SQL parameter placeholder (e.g., ``$2``).
+
+        Returns:
+            The casted placeholder string (e.g., ``$2::vector``).
+        """
+        return f"{placeholder}::vector"
+
+    # ------------------------------------------------------------------
+    # SIMILAR-aware query builder (overrides RDBMSBackend)
+    # ------------------------------------------------------------------
+
+    def _build_query_sql(self, source: str, intent: QueryIntent) -> tuple[str, list[Any]]:
+        """Build SQL for a QUERY intent, handling SIMILAR predicates.
+
+        SIMILAR predicates are extracted from the predicate tree and turned
+        into an ``ORDER BY <col> <distance_op> <vector>`` clause instead of
+        appearing in the ``WHERE`` clause.
+        """
+        similar_preds, remaining_group = self._extract_similar(intent.predicates)
+
+        if not similar_preds:
+            return super()._build_query_sql(source, intent)
+
+        if intent.predicates.op.value == "OR":
+            raise ValueError("SIMILAR predicates are not supported inside OR groups")
+
+        similar_values = [self._parse_similar_value(p) for p in similar_preds]
+        params: list[Any] = []
+        projections = self._build_select(intent.projections)
+        table = self.quote_identifier(source)
+
+        # WHERE from remaining (non-SIMILAR) predicates
+        where = self._build_where(remaining_group, params)
+
+        sql = f"SELECT {projections} FROM {table}"
+        if where:
+            sql += f" WHERE {where}"
+
+        # Threshold filters and ORDER BY parts for each SIMILAR predicate
+        order_parts: list[str] = []
+        for pred, sv in zip(similar_preds, similar_values, strict=True):
+            assert sv.vector is not None  # guaranteed by _parse_similar_value
+            params.append(self._format_vector(sv.vector))
+            vector_ph = self.placeholder(len(params))
+
+            col = self.quote_identifier(pred.field_id)
+            dist_op = self.distance_operator(sv.distance_function)
+            order_expr = f"{col} {dist_op} {self.cast_vector(vector_ph)}"
+            order_parts.append(order_expr)
+
+            if sv.threshold is not None:
+                params.append(sv.threshold)
+                threshold_ph = self.placeholder(len(params))
+                conjunction = " AND " if where or "WHERE" in sql else " WHERE "
+                sql += f"{conjunction}{order_expr} < {threshold_ph}"
+                where = where or "applied"
+
+        sql += f" ORDER BY {', '.join(order_parts)}"
+
+        limit = self._resolve_similar_limit(similar_values, intent.limit)
+        if limit is not None:
+            sql += f" {self.build_limit_clause(limit)}"
+
+        return sql, params
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_vector(vector: list[float]) -> str:
+        """Format a float list as a pgvector literal string, e.g. ``'[0.1,0.2,0.3]'``."""
+        return "[" + ",".join(str(v) for v in vector) + "]"
 
     def _require_pool(self) -> asyncpg.Pool:
         if self._pool is None:

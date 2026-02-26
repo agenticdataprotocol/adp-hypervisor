@@ -10,6 +10,7 @@ from adp_hypervisor.manifest.physical import (
 )
 from adp_hypervisor.protocol.types import (
     IdentityPredicate,
+    Intent,
     LookupIntent,
     Predicate,
     PredicateGroup,
@@ -17,6 +18,7 @@ from adp_hypervisor.protocol.types import (
     QueryIntent,
     SimilarValue,
 )
+from backends.base import BackendResult
 from backends.vector.backend import VectorBackend
 from backends.vector.pgvector import PgVectorBackend, _inject_password
 
@@ -43,6 +45,19 @@ def _make_definition() -> BackendDefinition:
 
 
 class _StubVectorBackend(VectorBackend):
+    """Concrete stub for protocol-level helper tests (no SQL)."""
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def execute(self, intent: Intent) -> BackendResult:
+        return BackendResult(rows=[])
+
+
+class _StubPgVectorBackend(PgVectorBackend):
     """Concrete stub that satisfies abstract methods without a real DB."""
 
     async def connect(self) -> None:
@@ -55,8 +70,12 @@ class _StubVectorBackend(VectorBackend):
         return []
 
 
-def _make_backend() -> _StubVectorBackend:
+def _make_vector_backend() -> _StubVectorBackend:
     return _StubVectorBackend(definition=_make_definition())
+
+
+def _make_pgvector_backend() -> _StubPgVectorBackend:
+    return _StubPgVectorBackend(definition=_make_definition())
 
 
 # =============================================================================
@@ -68,7 +87,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
     """Test that SIMILAR predicates produce the correct SQL."""
 
     def setUp(self) -> None:
-        self.backend = _make_backend()
+        self.backend = _make_pgvector_backend()
 
     def test_similar_cosine_distance_default(self) -> None:
         intent = QueryIntent(
@@ -336,10 +355,10 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
 
 class TestInheritedRDBMSCapabilities(unittest.TestCase):
-    """Verify VectorBackend retains standard RDBMS query capabilities."""
+    """Verify PgVectorBackend retains standard RDBMS query capabilities."""
 
     def setUp(self) -> None:
-        self.backend = _make_backend()
+        self.backend = _make_pgvector_backend()
 
     def test_query_without_similar(self) -> None:
         intent = QueryIntent(
@@ -373,7 +392,7 @@ class TestInheritedRDBMSCapabilities(unittest.TestCase):
 
 class TestDistanceOperator(unittest.TestCase):
     def setUp(self) -> None:
-        self.backend = _make_backend()
+        self.backend = _make_pgvector_backend()
 
     def test_cosine(self) -> None:
         self.assertEqual(self.backend.distance_operator("COSINE"), "<=>")
@@ -398,7 +417,7 @@ class TestDistanceOperator(unittest.TestCase):
 
 class TestExtractSimilar(unittest.TestCase):
     def setUp(self) -> None:
-        self.backend = _make_backend()
+        self.backend = _make_vector_backend()
 
     def test_extracts_similar_predicate(self) -> None:
         similar = Predicate(
