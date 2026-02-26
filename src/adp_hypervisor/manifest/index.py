@@ -52,7 +52,7 @@ def _is_valid_resource_selector(selector: str) -> bool:
     if s == "*":
         return True
     if "*" not in s:
-        return ":" in s and s.count(":") >= 1
+        return _is_valid_concrete_resource_id(s)
     if s.endswith(":*"):
         return s.count("*") == 1
     if s.endswith(".*"):
@@ -68,7 +68,12 @@ def _is_valid_concrete_resource_id(resource_id: str) -> bool:
     if not resource_id or not resource_id.strip():
         return False
     s = resource_id.strip()
-    return ":" in s and "*" not in s
+    if "*" in s:
+        return False
+    if s.count(":") != 1:
+        return False
+    left, right = s.split(":", 1)
+    return bool(left.strip()) and bool(right.strip())
 
 
 class ManifestIndex:
@@ -350,3 +355,30 @@ class ManifestIndex:
             return []
         max_specificity = max(s for s, _ in matches)
         return [p for s, p in matches if s == max_specificity]
+
+
+# =============================================================================
+# Global ManifestIndex registry (for backends that need manifest lookups)
+# =============================================================================
+
+_GLOBAL_MANIFEST_INDEX: ManifestIndex | None = None
+
+
+def set_global_manifest_index(index: ManifestIndex | None) -> None:
+    """Set the process-wide ManifestIndex used by backends.
+
+    Passing None clears the global index.
+    """
+    global _GLOBAL_MANIFEST_INDEX
+    _GLOBAL_MANIFEST_INDEX = index
+
+
+def get_global_manifest_index() -> ManifestIndex:
+    """Return the process-wide ManifestIndex.
+
+    Raises:
+        RuntimeError: If the global ManifestIndex has not been configured.
+    """
+    if _GLOBAL_MANIFEST_INDEX is None:
+        raise RuntimeError("Global ManifestIndex has not been configured")
+    return _GLOBAL_MANIFEST_INDEX

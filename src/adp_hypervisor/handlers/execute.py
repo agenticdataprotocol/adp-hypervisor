@@ -84,15 +84,23 @@ class ExecuteHandler(Handler):
         if resource is None:
             raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
 
+        # Ensure the resource has a concrete source before executing.
+        # This keeps error semantics local to the handler and avoids
+        # backend-specific failures when source definitions are missing.
+        source = resource.source_definition.source
+        if not source:
+            raise ExecutionFailedError(
+                f"Resource {resource.resource_id!r} has no source definitions"
+            )
+
         await self._validate_intent(params)
         # TODO: Enforce operational policy rules (e.g., enforce_limit) before execution.
 
         backend = self._resolve_backend(resource)
-        source = self._get_source(resource)
 
         start_s = time.monotonic()
         try:
-            result = await backend.execute(source, request.intent)
+            result = await backend.execute(request.intent)
         except Exception as exc:
             logger.error(
                 "Execution failed: resource=%s, backend=%s",
@@ -176,22 +184,3 @@ class ExecuteHandler(Handler):
                 f"Ensure the backend is registered before handling requests."
             )
         return backend
-
-    def _get_source(self, resource: CuratedResource) -> str:
-        """Extract the source identifier from a resource.
-
-        Args:
-            resource: The curated resource definition.
-
-        Returns:
-            The source identifier (e.g., table name).
-
-        Raises:
-            ExecutionFailedError: If the resource has no source definitions.
-        """
-        source = resource.source_definition.source
-        if not source:
-            raise ExecutionFailedError(
-                f"Resource {resource.resource_id!r} has no source definitions"
-            )
-        return source

@@ -258,7 +258,10 @@ class TestExecuteSuccess(unittest.IsolatedAsyncioTestCase):
 
         backend.execute.assert_called_once()
         call_args = backend.execute.call_args
-        self.assertEqual(call_args[0][0], "test_table")
+        # Backend should receive the Intent; resource → source mapping is handled
+        # via the manifest index at backend level.
+        intent_arg = call_args[0][0]
+        self.assertEqual(intent_arg.resource_id, "com.acme:test_resource")
 
     async def test_query_with_projections(self) -> None:
         rows = [{"id": "1", "name": "Alice"}]

@@ -17,7 +17,10 @@ from adp_hypervisor.handlers import (
     PingHandler,
     ValidateHandler,
 )
-from adp_hypervisor.manifest.index import ManifestIndex
+from adp_hypervisor.manifest.index import (
+    ManifestIndex,
+    set_global_manifest_index,
+)
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendType,
@@ -151,6 +154,8 @@ class ADPServer:
         """Load manifests from the provider and build the index."""
         self._manifest_provider.load()
         self._manifest_index = ManifestIndex(self._manifest_provider)
+        # Expose manifest index globally so backends can resolve resources
+        set_global_manifest_index(self._manifest_index)
         logger.info("Manifests loaded")
 
     async def _initialize_backends(self) -> None:

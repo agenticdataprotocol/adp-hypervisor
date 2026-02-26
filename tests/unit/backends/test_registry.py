@@ -29,7 +29,7 @@ class FakeBackend(Backend):
     async def disconnect(self) -> None:
         self.disconnected = True
 
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         return BackendResult(rows=[])
 
 

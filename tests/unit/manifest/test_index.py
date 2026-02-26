@@ -328,6 +328,8 @@ class TestResourceSelectorValidation(unittest.TestCase):
         self.assertFalse(_is_valid_resource_selector("com.acme.*:*"))
         self.assertFalse(_is_valid_resource_selector("no-colon"))
         self.assertFalse(_is_valid_resource_selector("ns:*:extra"))
+        self.assertFalse(_is_valid_resource_selector("ns:"))
+        self.assertFalse(_is_valid_resource_selector(":name"))
 
 
 class TestConcreteResourceIdValidation(unittest.TestCase):
@@ -342,6 +344,9 @@ class TestConcreteResourceIdValidation(unittest.TestCase):
         self.assertFalse(_is_valid_concrete_resource_id("   "))
         self.assertFalse(_is_valid_concrete_resource_id("no-colon"))
         self.assertFalse(_is_valid_concrete_resource_id("com.acme:*"))
+        self.assertFalse(_is_valid_concrete_resource_id("ns:"))
+        self.assertFalse(_is_valid_concrete_resource_id(":name"))
+        self.assertFalse(_is_valid_concrete_resource_id("a:b:c"))
 
 
 class TestManifestIndexResourceSelectorDefensive(unittest.TestCase):
