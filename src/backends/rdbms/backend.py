@@ -201,7 +201,7 @@ class RDBMSBackend(Backend):
         source = resource.source_definition.source
         if not source:
             raise ValueError(
-                f"CuratedResource {resource.resource_id!r} has no source_definition.source"
+                f"Resource {resource.resource_id!r} has no source definitions"
             )
         sql, params = self._intent_to_sql(source, intent)
         logger.debug("Executing SQL: %s | params=%s", sql, params)
