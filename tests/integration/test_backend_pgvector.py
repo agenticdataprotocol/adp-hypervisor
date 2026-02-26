@@ -9,11 +9,13 @@ import unittest
 
 from testcontainers.postgres import PostgresContainer
 
+from adp_hypervisor.manifest.index import set_global_manifest_index
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendType,
     VectorBackendConfig,
 )
+from adp_hypervisor.manifest.semantic import CuratedResource
 from adp_hypervisor.protocol.types import (
     IdentityPredicate,
     LookupIntent,
@@ -28,6 +30,8 @@ from backends.vector.pgvector import PgVectorBackend
 # =============================================================================
 # Module-level fixtures
 # =============================================================================
+
+_RESOURCE_ID = "test:documents"
 
 _TABLE_DDL = """
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -62,6 +66,7 @@ def setUpModule() -> None:
     _backend_definition = BackendDefinition(
         id="test_pgvector",
         type=BackendType.VECTOR,
+        provider="pgvector",
         config=VectorBackendConfig(
             provider="pgvector",
             index_name="documents",
@@ -69,6 +74,8 @@ def setUpModule() -> None:
             dimensions=3,
         ),
     )
+    # Configure a minimal global ManifestIndex stub for backend lookups.
+    set_global_manifest_index(_TestManifestIndex())
 
 
 def tearDownModule() -> None:
@@ -89,6 +96,34 @@ def _get_backend_definition() -> BackendDefinition:
     if _backend_definition is None:
         raise RuntimeError("setUpModule was not called")
     return _backend_definition
+
+
+def _make_resource() -> CuratedResource:
+    """Return a minimal CuratedResource bound to the documents table."""
+    backend_def = _get_backend_definition()
+    return CuratedResource.model_validate(
+        {
+            "resourceId": _RESOURCE_ID,
+            "intentClasses": ["*"],
+            "backendId": backend_def.id,
+            "version": 1,
+            "sourceDefinition": {
+                "source": "documents",
+            },
+        }
+    )
+
+
+class _TestManifestIndex:
+    """Minimal stub manifest index exposing get_resource for this test module."""
+
+    def __init__(self) -> None:
+        self._resource = _make_resource()
+
+    def get_resource(self, resource_id: str) -> CuratedResource | None:
+        if resource_id == self._resource.resource_id:
+            return self._resource
+        return None
 
 
 class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
@@ -135,6 +170,7 @@ class TestSimilarIntent(_SeededBackendMixin):
     async def test_similar_cosine_top_3(self) -> None:
         """Find 3 documents closest to [0.1, 0.2, 0.3] via cosine distance."""
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -146,7 +182,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 3)
         # Closest should be the exact match "Introduction to AI"
         self.assertEqual(result.rows[0]["title"], "Introduction to AI")
@@ -154,6 +190,7 @@ class TestSimilarIntent(_SeededBackendMixin):
     async def test_similar_with_category_filter(self) -> None:
         """SIMILAR with a WHERE filter on category."""
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -170,7 +207,7 @@ class TestSimilarIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         categories = {row["category"] for row in result.rows}
         self.assertEqual(categories, {"tech"})
@@ -178,6 +215,7 @@ class TestSimilarIntent(_SeededBackendMixin):
     async def test_similar_l2_distance(self) -> None:
         """Vector search using L2 distance function."""
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -189,13 +227,14 @@ class TestSimilarIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         self.assertEqual(result.rows[0]["title"], "Cooking 101")
 
     async def test_similar_with_projections(self) -> None:
         """SIMILAR with explicit projections."""
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -208,7 +247,7 @@ class TestSimilarIntent(_SeededBackendMixin):
             ),
             projections=["title"],
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertIn("title", result.rows[0])
         self.assertNotIn("category", result.rows[0])
@@ -222,14 +261,16 @@ class TestSimilarIntent(_SeededBackendMixin):
 class TestInheritedRDBMS(_SeededBackendMixin):
     async def test_lookup_by_id(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=1),
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["title"], "Introduction to AI")
 
     async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -241,7 +282,7 @@ class TestInheritedRDBMS(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute("documents", intent)
+        result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         titles = {row["title"] for row in result.rows}
         self.assertEqual(titles, {"Cooking 101", "Baking Bread"})

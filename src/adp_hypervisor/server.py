@@ -58,9 +58,11 @@ def _create_backend(definition: BackendDefinition) -> Backend | None:
         return None
 
     if definition.type == BackendType.VECTOR:
-        from backends.vector.pgvector import PgVectorBackend
+        if provider == "pgvector":
+            from backends.vector.pgvector import PgVectorBackend
 
-        return PgVectorBackend(definition=definition)
+            return PgVectorBackend(definition=definition)
+        return None
 
     return None
 

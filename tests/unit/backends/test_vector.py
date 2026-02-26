@@ -25,10 +25,14 @@ from backends.vector.pgvector import PgVectorBackend, _inject_password
 # =============================================================================
 
 
+_RESOURCE_ID = "test:documents"
+
+
 def _make_definition() -> BackendDefinition:
     return BackendDefinition(
         id="test_vector",
         type=BackendType.VECTOR,
+        provider="pgvector",
         config=VectorBackendConfig(
             provider="pgvector",
             index_name="documents",
@@ -68,6 +72,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_cosine_distance_default(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -87,6 +92,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_l2_distance(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -105,6 +111,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_inner_product_distance(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -123,6 +130,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_with_threshold(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -140,6 +148,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_with_other_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -164,6 +173,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_top_overrides_intent_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -182,6 +192,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_falls_back_to_intent_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -199,6 +210,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_with_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -216,6 +228,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_invalid_similar_value_type(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -232,6 +245,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_value_without_text(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -252,6 +266,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_similar_in_or_group_raises(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="OR",
                 predicates=[
@@ -269,6 +284,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_multiple_similar_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -293,6 +309,7 @@ class TestSimilarSQLGeneration(unittest.TestCase):
 
     def test_multiple_similar_conflicting_top_raises(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -326,6 +343,7 @@ class TestInheritedRDBMSCapabilities(unittest.TestCase):
 
     def test_query_without_similar(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -340,6 +358,7 @@ class TestInheritedRDBMSCapabilities(unittest.TestCase):
 
     def test_lookup_intent(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=1),
         )
         sql, params = self.backend._build_lookup_sql("users", intent)
