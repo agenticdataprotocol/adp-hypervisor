@@ -86,11 +86,11 @@ class ExecuteHandler(Handler):
 
         # Ensure the resource has a concrete source before executing.
         # This keeps error semantics local to the handler and avoids
-        # backend-specific failures when source definitions are missing.
+        # backend-specific failures when the concrete source field is missing.
         source = resource.source_definition.source
         if not source:
             raise ExecutionFailedError(
-                f"Resource {resource.resource_id!r} has no source definitions"
+                f"Resource {resource.resource_id!r} is missing source_definition.source"
             )
 
         await self._validate_intent(params)
