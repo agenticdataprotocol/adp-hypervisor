@@ -200,9 +200,7 @@ class RDBMSBackend(Backend):
             raise ValueError(f"Resource not found for intent.resource_id={intent.resource_id!r}")
         source = resource.source_definition.source
         if not source:
-            raise ValueError(
-                f"Resource {resource.resource_id!r} has no source definitions"
-            )
+            raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
         sql, params = self._intent_to_sql(source, intent)
         logger.debug("Executing SQL: %s | params=%s", sql, params)
         rows = await self.fetch_all(sql, params, source)

@@ -412,7 +412,8 @@ class TestExecuteBackendErrors(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ExecutionFailedError) as ctx:
             await handler.handle(_make_query_params(resource_id="com.acme:no_sources"))
-        self.assertIn("no source definitions", ctx.exception.message)
+        # Error message should clearly indicate missing source definition.
+        self.assertIn("missing source_definition.source", ctx.exception.message)
 
 
 # =============================================================================
