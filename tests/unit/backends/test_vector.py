@@ -17,6 +17,7 @@ from adp_hypervisor.protocol.types import (
     PredicateOperator,
     QueryIntent,
     SimilarValue,
+    SortOrder,
 )
 from backends.base import BackendResult
 from backends.vector.backend import VectorBackend
@@ -162,7 +163,51 @@ class TestSimilarSQLGeneration(unittest.TestCase):
             ),
         )
         sql, params = self.backend._build_query_sql("documents", intent)
+        self.assertIn("< (1.0 - $2)", sql)
+        self.assertEqual(params[1], 0.5)
+
+    def test_similar_threshold_l2(self) -> None:
+        intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
+            predicates=PredicateGroup(
+                op="AND",
+                predicates=[
+                    Predicate(
+                        field_id="embedding",
+                        op=PredicateOperator.SIMILAR,
+                        value=SimilarValue(
+                            vector=[0.1, 0.2], top=10, threshold=0.5, distance_function="L2"
+                        ),
+                    ),
+                ],
+            ),
+        )
+        sql, params = self.backend._build_query_sql("documents", intent)
         self.assertIn("< $2", sql)
+        self.assertNotIn("1.0 -", sql)
+        self.assertEqual(params[1], 0.5)
+
+    def test_similar_threshold_inner_product(self) -> None:
+        intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
+            predicates=PredicateGroup(
+                op="AND",
+                predicates=[
+                    Predicate(
+                        field_id="embedding",
+                        op=PredicateOperator.SIMILAR,
+                        value=SimilarValue(
+                            vector=[0.1, 0.2],
+                            top=10,
+                            threshold=0.5,
+                            distance_function="INNER_PRODUCT",
+                        ),
+                    ),
+                ],
+            ),
+        )
+        sql, params = self.backend._build_query_sql("documents", intent)
+        self.assertIn("< (-$2)", sql)
         self.assertEqual(params[1], 0.5)
 
     def test_similar_with_other_predicates(self) -> None:
@@ -347,6 +392,29 @@ class TestSimilarSQLGeneration(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "conflicting top values"):
             self.backend._build_query_sql("documents", intent)
+
+    def test_similar_with_order_by_secondary_sort(self) -> None:
+        intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
+            predicates=PredicateGroup(
+                op="AND",
+                predicates=[
+                    Predicate(
+                        field_id="embedding",
+                        op=PredicateOperator.SIMILAR,
+                        value=SimilarValue(vector=[0.1, 0.2], top=5),
+                    ),
+                ],
+            ),
+            order_by=[SortOrder(field_id="title", direction="ASC")],
+        )
+        sql, _ = self.backend._build_query_sql("documents", intent)
+        self.assertIn('ORDER BY "embedding" <=>', sql)
+        self.assertIn('"title" ASC', sql)
+        order_idx = sql.index("ORDER BY")
+        distance_idx = sql.index("<=>", order_idx)
+        title_idx = sql.index('"title" ASC', order_idx)
+        self.assertLess(distance_idx, title_idx)
 
 
 # =============================================================================

@@ -28,6 +28,15 @@ _DISTANCE_OP_MAP: dict[str, str] = {
 
 _DEFAULT_DISTANCE_FUNCTION = "COSINE"
 
+# SQL expressions that convert a similarity threshold (0.0–1.0, higher = more
+# similar) into the corresponding distance ceiling for each pgvector operator.
+# {ph} is replaced with the parameter placeholder at query-build time.
+_THRESHOLD_EXPR: dict[str, str] = {
+    "COSINE": "(1.0 - {ph})",
+    "L2": "{ph}",
+    "INNER_PRODUCT": "(-{ph})",
+}
+
 
 class PgVectorBackend(RDBMSBackend, VectorBackend):
     """pgvector backend using asyncpg connection pool.
@@ -158,6 +167,7 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
             vector_ph = self.placeholder(len(params))
 
             col = self.quote_identifier(pred.field_id)
+            fn = (sv.distance_function or _DEFAULT_DISTANCE_FUNCTION).upper()
             dist_op = self.distance_operator(sv.distance_function)
             order_expr = f"{col} {dist_op} {self.cast_vector(vector_ph)}"
             order_parts.append(order_expr)
@@ -165,9 +175,14 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
             if sv.threshold is not None:
                 params.append(sv.threshold)
                 threshold_ph = self.placeholder(len(params))
+                distance_ceiling = _THRESHOLD_EXPR[fn].format(ph=threshold_ph)
                 conjunction = " AND " if where or "WHERE" in sql else " WHERE "
-                sql += f"{conjunction}{order_expr} < {threshold_ph}"
+                sql += f"{conjunction}{order_expr} < {distance_ceiling}"
                 where = where or "applied"
+
+        # Append intent.order_by as secondary sort keys after distance ordering
+        if intent.order_by:
+            order_parts.append(self._build_order_by(intent.order_by))
 
         sql += f" ORDER BY {', '.join(order_parts)}"
 
