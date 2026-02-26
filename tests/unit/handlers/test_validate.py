@@ -80,6 +80,7 @@ def _make_query_params(
         ]
     intent: dict[str, Any] = {
         "intentClass": "QUERY",
+        "resourceId": resource_id,
         "predicates": {"op": logic_op, "predicates": predicates},
     }
     if projections is not None:
@@ -88,7 +89,7 @@ def _make_query_params(
         intent["orderBy"] = order_by
     if limit is not None:
         intent["limit"] = limit
-    return {"resourceId": resource_id, "intent": intent}
+    return {"intent": intent}
 
 
 def _make_lookup_params(
@@ -99,11 +100,12 @@ def _make_lookup_params(
 ) -> dict[str, Any]:
     intent: dict[str, Any] = {
         "intentClass": "LOOKUP",
+        "resourceId": resource_id,
         "key": {"fieldId": key_field, "op": "EQ", "value": key_value},
     }
     if projections is not None:
         intent["projections"] = projections
-    return {"resourceId": resource_id, "intent": intent}
+    return {"intent": intent}
 
 
 def _make_ingest_params(
@@ -113,8 +115,7 @@ def _make_ingest_params(
     if payload is None:
         payload = [{"id": "1", "name": "test"}]
     return {
-        "resourceId": resource_id,
-        "intent": {"intentClass": "INGEST", "payload": payload},
+        "intent": {"intentClass": "INGEST", "resourceId": resource_id, "payload": payload},
     }
 
 
@@ -131,9 +132,9 @@ def _make_revise_params(
     if payload is None:
         payload = {"name": "updated"}
     return {
-        "resourceId": resource_id,
         "intent": {
             "intentClass": "REVISE",
+            "resourceId": resource_id,
             "predicates": {"op": "AND", "predicates": predicates},
             "payload": payload,
         },
@@ -691,9 +692,9 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         params: dict[str, Any] = {
-            "resourceId": "com.acme:test_resource",
             "intent": {
                 "intentClass": "QUERY",
+                "resourceId": "com.acme:test_resource",
                 "predicates": {
                     "op": "NOT",
                     "predicates": [
@@ -718,9 +719,9 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
         params: dict[str, Any] = {
-            "resourceId": "com.acme:test_resource",
             "intent": {
                 "intentClass": "QUERY",
+                "resourceId": "com.acme:test_resource",
                 "predicates": {
                     "op": "AND",
                     "predicates": [

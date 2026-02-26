@@ -79,9 +79,10 @@ class ExecuteHandler(Handler):
         """
         request = ExecuteRequestParams.model_validate(params)
 
-        resource = self._manifest_index.get_resource(request.resource_id)
+        resource_id = request.intent.resource_id
+        resource = self._manifest_index.get_resource(resource_id)
         if resource is None:
-            raise ResourceNotFoundError(f"Resource not found: {request.resource_id!r}")
+            raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
 
         await self._validate_intent(params)
         # TODO: Enforce operational policy rules (e.g., enforce_limit) before execution.
@@ -95,12 +96,12 @@ class ExecuteHandler(Handler):
         except Exception as exc:
             logger.error(
                 "Execution failed: resource=%s, backend=%s",
-                request.resource_id,
+                request.intent.resource_id,
                 resource.backend_id,
                 exc_info=True,
             )
             raise ExecutionFailedError(
-                f"Execution failed for resource {request.resource_id!r}"
+                f"Execution failed for resource {resource_id!r}"
             ) from exc
         duration_ms = int((time.monotonic() - start_s) * 1000)
 
@@ -110,7 +111,7 @@ class ExecuteHandler(Handler):
 
         logger.info(
             "Execute: resource=%s, intent_class=%s, rows=%d, duration_ms=%d",
-            request.resource_id,
+            resource_id,
             request.intent.intent_class,
             len(result.rows),
             duration_ms,

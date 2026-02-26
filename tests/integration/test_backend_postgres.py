@@ -30,6 +30,8 @@ from backends.rdbms.postgres import PostgresBackend
 # Module-level fixtures
 # =============================================================================
 
+_RESOURCE_ID = "test:users"
+
 _TABLE_DDL = """
 CREATE TABLE users (
     id   SERIAL PRIMARY KEY,
@@ -59,6 +61,7 @@ def setUpModule() -> None:
     _backend_definition = BackendDefinition(
         id="test_pg",
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri=dsn),
     )
 
@@ -126,6 +129,7 @@ class TestConnection(unittest.IsolatedAsyncioTestCase):
 class TestLookupIntent(_SeededBackendMixin):
     async def test_lookup_by_id(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=1),
         )
         result = await self.backend.execute("users", intent)
@@ -134,6 +138,7 @@ class TestLookupIntent(_SeededBackendMixin):
 
     async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=2),
             projections=["name"],
         )
@@ -144,6 +149,7 @@ class TestLookupIntent(_SeededBackendMixin):
 
     async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=999),
         )
         result = await self.backend.execute("users", intent)
@@ -158,6 +164,7 @@ class TestLookupIntent(_SeededBackendMixin):
 class TestQueryIntent(_SeededBackendMixin):
     async def test_query_all(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -170,6 +177,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -184,6 +192,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_with_order_and_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -200,6 +209,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_with_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -216,6 +226,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -228,6 +239,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_in_empty_list_raises(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -240,6 +252,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -254,6 +267,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_or_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="OR",
                 predicates=[
@@ -269,6 +283,7 @@ class TestQueryIntent(_SeededBackendMixin):
 
     async def test_query_nested_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -296,12 +311,13 @@ class TestQueryIntent(_SeededBackendMixin):
 
 class TestUnsupportedIntents(_SeededBackendMixin):
     async def test_ingest_not_supported(self) -> None:
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
             await self.backend.execute("users", intent)
 
     async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[

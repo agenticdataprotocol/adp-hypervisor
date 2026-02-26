@@ -116,12 +116,10 @@ def _get_operators_for_field(field_type: FieldType | None) -> list[PredicateOper
 
 def _get_mandatory_field_ids(manifest_index: ManifestIndex, resource_id: str) -> set[str]:
     """Get field IDs that have MANDATORY_FILTER policy rules."""
-    from adp_hypervisor.manifest.policy import MandatoryFilterRule
+    from adp_hypervisor.manifest.policy import MandatoryFilterPolicy
 
-    policy = manifest_index.get_policy(resource_id)
-    if policy is None or policy.rules is None:
-        return set()
-    return {rule.field_id for rule in policy.rules if isinstance(rule, MandatoryFilterRule)}
+    policies = manifest_index.get_mandatory_filter_policies(resource_id)
+    return {p.field_id for p in policies}
 
 
 def _build_read_capabilities(fields: list[Field], mandatory_field_ids: set[str]) -> Capabilities:

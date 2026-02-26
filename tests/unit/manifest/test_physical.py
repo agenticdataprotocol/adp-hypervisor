@@ -4,6 +4,7 @@ import unittest
 
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
+    BackendProvider,
     BackendType,
     CredentialReference,
     GraphBackendConfig,
@@ -105,6 +106,7 @@ class TestBackend(unittest.TestCase):
             {
                 "id": "finance_sql",
                 "type": "RDBMS",
+                "provider": "postgresql",
                 "config": {
                     "type": "RDBMS",
                     "uri": "postgresql://localhost:5432/finance",
@@ -114,8 +116,8 @@ class TestBackend(unittest.TestCase):
         )
         self.assertEqual(backend.id, "finance_sql")
         self.assertEqual(backend.type, BackendType.RDBMS)
+        self.assertEqual(backend.provider, "postgresql")
         self.assertIsInstance(backend.config, RDBMSBackendConfig)
-        self.assertIsNotNone(backend.credentials)
         self.assertIsNotNone(backend.credentials)
         self.assertEqual(backend.credentials.type, "env")
 
@@ -124,6 +126,7 @@ class TestBackend(unittest.TestCase):
             {
                 "id": "vectors",
                 "type": "VECTOR",
+                "provider": "pinecone",
                 "config": {
                     "type": "VECTOR",
                     "provider": "PINECONE",
@@ -132,6 +135,7 @@ class TestBackend(unittest.TestCase):
             }
         )
         self.assertEqual(backend.type, BackendType.VECTOR)
+        self.assertEqual(backend.provider, "pinecone")
         self.assertIsInstance(backend.config, VectorBackendConfig)
         self.assertIsNone(backend.credentials)
 
@@ -140,11 +144,36 @@ class TestBackend(unittest.TestCase):
             {
                 "id": "db",
                 "type": "RDBMS",
+                "provider": "postgresql",
                 "config": {"type": "RDBMS", "uri": "postgresql://localhost/db"},
                 "metadata": {"region": "us-east-1"},
             }
         )
         self.assertEqual(backend.metadata, {"region": "us-east-1"})
+
+    def test_provider_is_required(self) -> None:
+        """provider field is required; omitting it raises a validation error."""
+        with self.assertRaises(ValueError):
+            BackendDefinition.model_validate(
+                {
+                    "id": "db",
+                    "type": "RDBMS",
+                    "config": {"type": "RDBMS", "uri": "postgresql://localhost/db"},
+                }
+            )
+
+    def test_provider_type_alias(self) -> None:
+        """BackendProvider is a string type alias used for provider field."""
+        self.assertIs(BackendProvider, str)
+
+    def test_field_order(self) -> None:
+        """Fields should follow spec order: id, type, provider, config, ..."""
+        field_names = list(BackendDefinition.model_fields.keys())
+        idx_type = field_names.index("type")
+        idx_provider = field_names.index("provider")
+        idx_config = field_names.index("config")
+        self.assertLess(idx_type, idx_provider)
+        self.assertLess(idx_provider, idx_config)
 
 
 # =============================================================================
@@ -161,11 +190,13 @@ class TestPhysicalManifest(unittest.TestCase):
                     {
                         "id": "db1",
                         "type": "RDBMS",
+                        "provider": "postgresql",
                         "config": {"type": "RDBMS", "uri": "postgresql://localhost/db"},
                     },
                     {
                         "id": "vec1",
                         "type": "VECTOR",
+                        "provider": "pinecone",
                         "config": {
                             "type": "VECTOR",
                             "provider": "PINECONE",
@@ -187,6 +218,7 @@ class TestPhysicalManifest(unittest.TestCase):
                 {
                     "id": "s3",
                     "type": "S3",
+                    "provider": "s3",
                     "config": {"type": "S3", "uri": "s3://bucket/", "region": "us-east-1"},
                 }
             ],
@@ -194,6 +226,7 @@ class TestPhysicalManifest(unittest.TestCase):
         manifest = PhysicalManifest.model_validate(data)
         dumped = manifest.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(dumped["backends"][0]["config"]["uri"], "s3://bucket/")
+        self.assertEqual(dumped["backends"][0]["provider"], "s3")
 
     def test_all_backend_types(self) -> None:
         """Verify all 5 backend types can be parsed."""
@@ -204,26 +237,31 @@ class TestPhysicalManifest(unittest.TestCase):
                     {
                         "id": "b1",
                         "type": "RDBMS",
+                        "provider": "postgresql",
                         "config": {"type": "RDBMS", "uri": "pg://localhost/db"},
                     },
                     {
                         "id": "b2",
                         "type": "VECTOR",
+                        "provider": "pinecone",
                         "config": {"type": "VECTOR", "provider": "P", "indexName": "i"},
                     },
                     {
                         "id": "b3",
                         "type": "S3",
+                        "provider": "s3",
                         "config": {"type": "S3", "uri": "s3://b/", "region": "us"},
                     },
                     {
                         "id": "b4",
                         "type": "NOSQL",
+                        "provider": "mongodb",
                         "config": {"type": "NOSQL", "uri": "mongo://localhost"},
                     },
                     {
                         "id": "b5",
                         "type": "GRAPH",
+                        "provider": "neo4j",
                         "config": {"type": "GRAPH", "uri": "neo4j://localhost"},
                     },
                 ],
@@ -240,4 +278,8 @@ class TestPhysicalManifest(unittest.TestCase):
                 BackendType.NOSQL,
                 BackendType.GRAPH,
             },
+        )
+        providers = [b.provider for b in manifest.backends]
+        self.assertEqual(
+            set(providers), {"postgresql", "pinecone", "s3", "mongodb", "neo4j"}
         )

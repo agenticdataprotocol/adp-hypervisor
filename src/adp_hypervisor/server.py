@@ -18,7 +18,10 @@ from adp_hypervisor.handlers import (
     ValidateHandler,
 )
 from adp_hypervisor.manifest.index import ManifestIndex
-from adp_hypervisor.manifest.physical import BackendDefinition, BackendType
+from adp_hypervisor.manifest.physical import (
+    BackendDefinition,
+    BackendType,
+)
 from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.protocol.dispatcher import Dispatcher
 from adp_hypervisor.transport.base import Transport
@@ -32,16 +35,24 @@ logger = logging.getLogger(__name__)
 def _create_backend(definition: BackendDefinition) -> Backend | None:
     """Create a backend instance from a definition, using lazy imports.
 
+    Selection is by both type and provider: e.g. RDBMS with provider
+    "postgresql" maps to PostgresBackend; RDBMS with "mysql" is not yet
+    implemented and returns None.
+
     Args:
         definition: The backend definition from the physical manifest.
 
     Returns:
-        A backend instance, or None if the backend type is not supported.
+        A backend instance, or None if the type+provider is not supported.
     """
-    if definition.type == BackendType.RDBMS:
-        from backends.rdbms.postgres import PostgresBackend
+    provider = definition.provider.strip().lower()
 
-        return PostgresBackend(definition=definition)
+    if definition.type == BackendType.RDBMS:
+        if provider == "postgresql":
+            from backends.rdbms.postgres import PostgresBackend
+
+            return PostgresBackend(definition=definition)
+        return None
 
     return None
 
@@ -150,8 +161,9 @@ class ADPServer:
             backend = _create_backend(backend_def)
             if backend is None:
                 logger.warning(
-                    "No factory for backend type %s (backend: %s), skipping",
+                    "No factory for backend type %s provider %s (backend: %s), skipping",
                     backend_def.type,
+                    backend_def.provider,
                     backend_def.id,
                 )
                 continue

@@ -613,6 +613,7 @@ class LookupIntent(ADPModel):
     intent_class: Literal["LOOKUP"] = PydanticField(
         default="LOOKUP", description="Intent class type"
     )
+    resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
     key: IdentityPredicate = PydanticField(
         ..., description="The identity predicate specifying the unique key to lookup"
     )
@@ -632,6 +633,7 @@ class QueryIntent(ADPModel):
     """Intent for retrieving a set of entities based on criteria."""
 
     intent_class: Literal["QUERY"] = PydanticField(default="QUERY", description="Intent class type")
+    resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
     predicates: PredicateGroup = PydanticField(..., description="Predicates for filtering data")
     projections: list[str] | None = PydanticField(default=None, description="Fields to project")
     order_by: list[SortOrder] | None = PydanticField(
@@ -648,6 +650,7 @@ class IngestIntent(ADPModel):
     intent_class: Literal["INGEST"] = PydanticField(
         default="INGEST", description="Intent class type"
     )
+    resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
     payload: list[dict[str, Any]] = PydanticField(..., description="The data payload to ingest")
 
 
@@ -657,6 +660,7 @@ class ReviseIntent(ADPModel):
     intent_class: Literal["REVISE"] = PydanticField(
         default="REVISE", description="Intent class type"
     )
+    resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
     predicates: PredicateGroup = PydanticField(
         ..., description="Predicates to identify the records to update"
     )
@@ -700,9 +704,8 @@ class ValidateRequestParams(RequestParams):
         extra="allow",  # RequestParams allows extra
     )
 
-    resource_id: ResourceId = PydanticField(..., description="The resource to validate against")
     intent: LookupIntent | QueryIntent | IngestIntent | ReviseIntent = PydanticField(
-        ..., description="The Intent to validate"
+        ..., description="The Intent to validate (includes resourceId)"
     )
 
 
@@ -732,9 +735,8 @@ class ValidateResult(Result):
 class ExecuteRequestParams(PaginatedRequestParams):
     """Parameters for the adp.execute request."""
 
-    resource_id: ResourceId = PydanticField(..., description="The resource to execute against")
     intent: LookupIntent | QueryIntent | IngestIntent | ReviseIntent = PydanticField(
-        ..., description="The Intent to execute"
+        ..., description="The Intent to execute (includes resourceId)"
     )
 
 

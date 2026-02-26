@@ -37,6 +37,7 @@ def _make_definition(backend_id: str = "test_db") -> BackendDefinition:
     return BackendDefinition(
         id=backend_id,
         type=BackendType.RDBMS,
+        provider="postgresql",
         config=RDBMSBackendConfig(uri="postgresql://localhost/test"),
     )
 

@@ -555,11 +555,13 @@ class TestIntentTypes(unittest.TestCase):
         intent = LookupIntent.model_validate(
             {
                 "intentClass": "LOOKUP",
+                "resourceId": "com.acme:users",
                 "key": {"fieldId": "id", "op": "EQ", "value": 123},
                 "projections": ["name", "email"],
             }
         )
         self.assertEqual(intent.intent_class, "LOOKUP")
+        self.assertEqual(intent.resource_id, "com.acme:users")
         self.assertEqual(intent.key.field_id, "id")
         self.assertEqual(intent.projections, ["name", "email"])
 
@@ -572,6 +574,7 @@ class TestIntentTypes(unittest.TestCase):
         intent = QueryIntent.model_validate(
             {
                 "intentClass": "QUERY",
+                "resourceId": "com.acme:orders",
                 "predicates": {
                     "op": "AND",
                     "predicates": [{"fieldId": "status", "op": "EQ", "value": "active"}],
@@ -582,6 +585,7 @@ class TestIntentTypes(unittest.TestCase):
             }
         )
         self.assertEqual(intent.intent_class, "QUERY")
+        self.assertEqual(intent.resource_id, "com.acme:orders")
         self.assertEqual(intent.predicates.op, LogicOperator.AND)
         self.assertEqual(intent.limit, 100)
 
@@ -589,6 +593,7 @@ class TestIntentTypes(unittest.TestCase):
         intent = IngestIntent.model_validate(
             {
                 "intentClass": "INGEST",
+                "resourceId": "com.acme:users",
                 "payload": [
                     {"name": "John", "age": 30},
                     {"name": "Jane", "age": 25},
@@ -596,12 +601,14 @@ class TestIntentTypes(unittest.TestCase):
             }
         )
         self.assertEqual(intent.intent_class, "INGEST")
+        self.assertEqual(intent.resource_id, "com.acme:users")
         self.assertEqual(len(intent.payload), 2)
 
     def test_revise_intent(self) -> None:
         intent = ReviseIntent.model_validate(
             {
                 "intentClass": "REVISE",
+                "resourceId": "com.acme:users",
                 "predicates": {
                     "op": "AND",
                     "predicates": [{"fieldId": "id", "op": "EQ", "value": 123}],
@@ -610,6 +617,7 @@ class TestIntentTypes(unittest.TestCase):
             }
         )
         self.assertEqual(intent.intent_class, "REVISE")
+        self.assertEqual(intent.resource_id, "com.acme:users")
         self.assertEqual(intent.payload, {"status": "inactive"})
 
 
@@ -633,15 +641,15 @@ class TestValidateTypes(unittest.TestCase):
     def test_validate_request_params(self) -> None:
         params = ValidateRequestParams.model_validate(
             {
-                "resourceId": "com.acme:users",
                 "intent": {
                     "intentClass": "LOOKUP",
+                    "resourceId": "com.acme:users",
                     "key": {"fieldId": "id", "op": "EQ", "value": 1},
                 },
             }
         )
-        self.assertEqual(params.resource_id, "com.acme:users")
         self.assertIsInstance(params.intent, LookupIntent)
+        self.assertEqual(params.intent.resource_id, "com.acme:users")
 
     def test_validate_result_valid(self) -> None:
         result = ValidateResult.model_validate({"valid": True})
@@ -672,9 +680,9 @@ class TestExecuteTypes(unittest.TestCase):
     def test_execute_request_params(self) -> None:
         params = ExecuteRequestParams.model_validate(
             {
-                "resourceId": "com.acme:users",
                 "intent": {
                     "intentClass": "QUERY",
+                    "resourceId": "com.acme:users",
                     "predicates": {
                         "op": "AND",
                         "predicates": [{"fieldId": "status", "op": "EQ", "value": "active"}],
@@ -683,8 +691,8 @@ class TestExecuteTypes(unittest.TestCase):
                 "cursor": "page2",
             }
         )
-        self.assertEqual(params.resource_id, "com.acme:users")
         self.assertIsInstance(params.intent, QueryIntent)
+        self.assertEqual(params.intent.resource_id, "com.acme:users")
 
     def test_execution_metadata(self) -> None:
         metadata = ExecutionMetadata.model_validate(

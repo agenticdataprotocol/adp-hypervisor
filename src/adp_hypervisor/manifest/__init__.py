@@ -4,6 +4,7 @@ from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.physical import (
     BackendConfig,
     BackendDefinition,
+    BackendProvider,
     BackendType,
     CredentialReference,
     GraphBackendConfig,
@@ -14,12 +15,14 @@ from adp_hypervisor.manifest.physical import (
     VectorBackendConfig,
 )
 from adp_hypervisor.manifest.policy import (
-    MandatoryFilterRule,
-    OperationalRule,
+    AccessPolicy,
+    MandatoryFilterPolicy,
+    OperationalPolicy,
+    Policy,
     PolicyCondition,
     PolicyManifest,
-    PolicyRule,
-    ResourcePolicy,
+    ResourceSelector,
+    RoleAccessEntry,
 )
 from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.manifest.semantic import (
@@ -41,6 +44,7 @@ __all__ = [
     "YamlManifestProvider",
     # Physical
     "BackendType",
+    "BackendProvider",
     "CredentialReference",
     "RDBMSBackendConfig",
     "VectorBackendConfig",
@@ -56,9 +60,11 @@ __all__ = [
     "SemanticManifest",
     # Policy
     "PolicyCondition",
-    "MandatoryFilterRule",
-    "OperationalRule",
-    "PolicyRule",
-    "ResourcePolicy",
+    "ResourceSelector",
+    "MandatoryFilterPolicy",
+    "OperationalPolicy",
+    "RoleAccessEntry",
+    "AccessPolicy",
+    "Policy",
     "PolicyManifest",
 ]

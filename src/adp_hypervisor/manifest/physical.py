@@ -102,11 +102,27 @@ BackendConfig = Annotated[
 """Backend-specific configuration, discriminated by type."""
 
 
+BackendProvider = str
+"""Provider (implementation/variant) within a backend type.
+
+Used to distinguish concrete backends when type alone is ambiguous
+(e.g. RDBMS could be "postgresql", "mysql", etc.). Implementors use this
+to select the correct driver or client.
+"""
+
+
 class BackendDefinition(ADPModel):
     """Definition of a physical backend data source."""
 
     id: str = PydanticField(..., description="Unique identifier for this backend")
-    type: BackendType = PydanticField(..., description="Type of backend")
+    type: BackendType = PydanticField(..., description="Type of backend (category)")
+    provider: BackendProvider = PydanticField(
+        ...,
+        description=(
+            "Provider (implementation/variant) to distinguish backends with the same type. "
+            "E.g. for type 'RDBMS', provider may be 'postgresql' or 'mysql'."
+        ),
+    )
     config: BackendConfig = PydanticField(..., description="Backend-specific configuration")
     credentials: CredentialReference | None = PydanticField(
         default=None, description="Credential reference for authentication"

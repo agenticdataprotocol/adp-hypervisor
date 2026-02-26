@@ -6,9 +6,10 @@
 version: "1.0.0"
 
 backends:
-  # RDBMS Backend Example
+  # RDBMS Backend Example (PostgreSQL)
   # - id: "my_database"
   #   type: "RDBMS"
+  #   provider: "postgresql"       # required: implementation variant (e.g. postgresql, mysql)
   #   config:
   #     type: "RDBMS"
   #     uri: "postgresql://localhost:5432/mydb"
@@ -17,9 +18,10 @@ backends:
   #     type: "env"
   #     key: "DB_PASSWORD"
 
-  # Vector Backend Example
+  # Vector Backend Example (Pinecone)
   # - id: "my_vectors"
   #   type: "VECTOR"
+  #   provider: "pinecone"         # required: implementation variant (e.g. pinecone, weaviate)
   #   config:
   #     type: "VECTOR"
   #     provider: "PINECONE"
@@ -33,6 +35,7 @@ backends:
   # S3 Backend Example
   # - id: "my_storage"
   #   type: "S3"
+  #   provider: "s3"               # required: implementation variant (e.g. s3, minio)
   #   config:
   #     type: "S3"
   #     uri: "s3://my-bucket/"

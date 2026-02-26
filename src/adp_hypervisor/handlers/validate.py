@@ -141,9 +141,10 @@ class ValidateHandler(Handler):
         """
         request = ValidateRequestParams.model_validate(params)
 
-        resource = self._manifest_index.get_resource(request.resource_id)
+        resource_id = request.intent.resource_id
+        resource = self._manifest_index.get_resource(resource_id)
         if resource is None:
-            raise ResourceNotFoundError(f"Resource not found: {request.resource_id!r}")
+            raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
 
         fields = self._extract_fields(resource)
         field_map = {f.field_id: f for f in fields}
@@ -167,7 +168,7 @@ class ValidateHandler(Handler):
 
         logger.info(
             "Validate: resource=%s, intent_class=%s, valid=%s, issues=%d",
-            request.resource_id,
+            resource_id,
             intent.intent_class,
             not has_blocking,
             len(issues),

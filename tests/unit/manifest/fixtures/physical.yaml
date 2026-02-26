@@ -6,6 +6,7 @@ backends:
   # RDBMS Backend - PostgreSQL database
   - id: "finance_sql"
     type: "RDBMS"
+    provider: "postgresql"
     config:
       type: "RDBMS"
       uri: "postgresql://db.acme.com:5432/finance"
@@ -17,6 +18,7 @@ backends:
   # Vector Database Backend - Pinecone
   - id: "report_vectors"
     type: "VECTOR"
+    provider: "pinecone"
     config:
       type: "VECTOR"
       provider: "PINECONE"
@@ -30,6 +32,7 @@ backends:
   # S3 Object Storage Backend
   - id: "raw_storage"
     type: "S3"
+    provider: "s3"
     config:
       type: "S3"
       uri: "s3://acme-finance-datalake/"
@@ -42,6 +45,7 @@ backends:
   # NoSQL Backend - MongoDB
   - id: "analytics_nosql"
     type: "NOSQL"
+    provider: "mongodb"
     config:
       type: "NOSQL"
       uri: "mongodb://mongo.acme.com:27017/analytics"
@@ -52,6 +56,7 @@ backends:
   # Graph Database Backend - Neo4j
   - id: "graph_db"
     type: "GRAPH"
+    provider: "neo4j"
     config:
       type: "GRAPH"
       uri: "neo4j://graph.acme.com:7687"
