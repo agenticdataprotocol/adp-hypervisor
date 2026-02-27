@@ -150,6 +150,9 @@ class MongoDBBackend(NOSQLBackend):
         db = self._require_db()
         coll = db[collection]
 
+        if limit == 0:
+            return []
+
         # Normalize filter to handle ObjectId
         normalized_filter = self._normalize_filter(filter_query)
 
@@ -234,39 +237,65 @@ class MongoDBBackend(NOSQLBackend):
                 result[key] = self._normalize_document(value)
             elif isinstance(value, list):
                 result[key] = [
-                    self._normalize_document(item) if isinstance(item, dict) else item
+                    (
+                        self._normalize_document(item)
+                        if isinstance(item, dict)
+                        else str(item) if isinstance(item, ObjectId) else item
+                    )
                     for item in value
                 ]
             else:
                 result[key] = value
         return result
 
-    def _normalize_filter(self, filter_query: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_filter(
+        self, filter_query: dict[str, Any], *, _parent_is_id: bool = False
+    ) -> dict[str, Any]:
         """Normalize filter to handle ObjectId conversion.
 
         Args:
             filter_query: The filter dict to normalize.
+            _parent_is_id: Whether the parent key was ``_id``, so string
+                values inside operator dicts should be converted to ObjectId.
 
         Returns:
             Normalized filter with ObjectId conversion for _id field.
         """
         result: dict[str, Any] = {}
         for key, value in filter_query.items():
-            if key == "_id" and isinstance(value, str):
+            is_id_context = _parent_is_id or key == "_id"
+
+            if is_id_context and isinstance(value, str):
                 try:
                     result[key] = ObjectId(value)
                 except Exception:
                     result[key] = value
             elif isinstance(value, dict):
-                result[key] = self._normalize_filter(value)
+                result[key] = self._normalize_filter(value, _parent_is_id=is_id_context)
             elif isinstance(value, list):
                 result[key] = [
-                    self._normalize_filter(item) if isinstance(item, dict) else item
+                    (
+                        self._normalize_filter(item, _parent_is_id=is_id_context)
+                        if isinstance(item, dict)
+                        else (
+                            self._try_objectid(item)
+                            if is_id_context and isinstance(item, str)
+                            else item
+                        )
+                    )
                     for item in value
                 ]
             else:
                 result[key] = value
         return result
+
+    @staticmethod
+    def _try_objectid(value: str) -> ObjectId | str:
+        """Try to convert a string to ObjectId, returning original on failure."""
+        try:
+            return ObjectId(value)
+        except Exception:
+            return value
 
     def _serialize_value(self, value: Any) -> Any:
         """Serialize value for samples.
@@ -301,10 +330,10 @@ class MongoDBBackend(NOSQLBackend):
             return FieldType.DATE
         if "bool" in type_names:
             return FieldType.BOOLEAN
-        if "int" in type_names:
-            return FieldType.INTEGER
         if "float" in type_names:
             return FieldType.FLOAT
+        if "int" in type_names:
+            return FieldType.INTEGER
         if "str" in type_names:
             return FieldType.STRING
         if "list" in type_names or "dict" in type_names:

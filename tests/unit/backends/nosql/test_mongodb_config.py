@@ -21,7 +21,9 @@ class TestMongoDBConfiguration(unittest.TestCase):
             {"type": "NOSQL", "uri": "mongodb://localhost:27017", "database": "testdb"}
         )
 
-        definition = BackendDefinition(id="test_mongo", type=BackendType.NOSQL, config=config)
+        definition = BackendDefinition(
+            id="test_mongo", type=BackendType.NOSQL, provider="mongodb", config=config
+        )
 
         backend = MongoDBBackend(definition=definition)
 
@@ -33,7 +35,9 @@ class TestMongoDBConfiguration(unittest.TestCase):
         """Test that MongoDB backend uses defaults when fields are missing."""
         config = NOSQLBackendConfig(type="NOSQL")
 
-        definition = BackendDefinition(id="test_mongo", type=BackendType.NOSQL, config=config)
+        definition = BackendDefinition(
+            id="test_mongo", type=BackendType.NOSQL, provider="mongodb", config=config
+        )
 
         backend = MongoDBBackend(definition=definition)
 
@@ -51,7 +55,9 @@ class TestMongoDBConfiguration(unittest.TestCase):
         }
 
         config = NOSQLBackendConfig.model_validate(config_dict)
-        definition = BackendDefinition(id="prod_mongo", type=BackendType.NOSQL, config=config)
+        definition = BackendDefinition(
+            id="prod_mongo", type=BackendType.NOSQL, provider="mongodb", config=config
+        )
 
         backend = MongoDBBackend(definition=definition)
 

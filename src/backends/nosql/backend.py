@@ -6,9 +6,11 @@ Subclasses supply connection management and dialect-specific implementations.
 """
 
 import logging
+import re
 from abc import abstractmethod
 from typing import Any
 
+from adp_hypervisor.manifest.index import get_global_manifest_index
 from adp_hypervisor.manifest.physical import BackendDefinition
 from adp_hypervisor.protocol.types import (
     Field,
@@ -171,18 +173,15 @@ class NOSQLBackend(Backend):
 
         # Handle CONTAINS operator (substring search for strings)
         if op == PredicateOperator.CONTAINS:
-            return {field: {"$regex": str(value), "$options": "i"}}
+            escaped = re.escape(str(value))
+            return {field: {"$regex": escaped, "$options": "i"}}
 
-        # Handle LIKE operator (pattern matching)
-        if op == PredicateOperator.LIKE:
-            # Convert SQL LIKE pattern to regex
-            pattern = str(value).replace("%", ".*").replace("_", ".")
+        # Handle LIKE / ILIKE operator (pattern matching)
+        if op in (PredicateOperator.LIKE, PredicateOperator.ILIKE):
+            pattern = _like_to_regex(str(value))
+            if op == PredicateOperator.ILIKE:
+                return {field: {"$regex": pattern, "$options": "i"}}
             return {field: {"$regex": pattern}}
-
-        # Handle ILIKE operator (case-insensitive pattern matching)
-        if op == PredicateOperator.ILIKE:
-            pattern = str(value).replace("%", ".*").replace("_", ".")
-            return {field: {"$regex": pattern, "$options": "i"}}
 
         # Handle standard comparison operators
         mongo_op = _OPERATOR_MAP.get(op)
@@ -229,17 +228,25 @@ class NOSQLBackend(Backend):
     # Backend interface implementation
     # -------------------------------------------------------------------------
 
-    async def validate(self, source: str, intent: Intent) -> list[ValidationIssue]:
+    async def validate(self, intent: Intent) -> list[ValidationIssue]:
         """Validate an intent by building the query without executing it.
 
         Args:
-            source: The source identifier.
             intent: The intent to validate.
 
         Returns:
             A list of validation issues. An empty list means the intent is valid.
         """
         try:
+            manifest_index = get_global_manifest_index()
+            resource = manifest_index.get_resource(intent.resource_id)
+            if resource is None:
+                raise ValueError(
+                    f"Resource not found for intent.resource_id={intent.resource_id!r}"
+                )
+            source = resource.source_definition.source
+            if not source:
+                raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
             self._intent_to_query(source, intent)
         except Exception as exc:
             return [
@@ -251,16 +258,22 @@ class NOSQLBackend(Backend):
             ]
         return []
 
-    async def execute(self, source: str, intent: Intent) -> BackendResult:
+    async def execute(self, intent: Intent) -> BackendResult:
         """Translate intent to query and execute it.
 
         Args:
-            source: The source identifier.
             intent: The intent to execute.
 
         Returns:
             The execution result containing rows and optional metadata.
         """
+        manifest_index = get_global_manifest_index()
+        resource = manifest_index.get_resource(intent.resource_id)
+        if resource is None:
+            raise ValueError(f"Resource not found for intent.resource_id={intent.resource_id!r}")
+        source = resource.source_definition.source
+        if not source:
+            raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
         filter_query, projection, sort, limit = self._intent_to_query(source, intent)
         logger.debug(
             "Executing query on %s: filter=%s, projection=%s, sort=%s, limit=%s",
@@ -311,6 +324,38 @@ class NOSQLBackend(Backend):
             )
 
         raise ValueError(f"Unknown intent type: {type(intent).__name__}")
+
+
+def _like_to_regex(pattern: str) -> str:
+    """Convert a SQL LIKE pattern to a MongoDB-compatible regex.
+
+    Splits on SQL wildcards (``%`` and ``_``), escapes regex metacharacters
+    in the literal segments, then reassembles with regex equivalents and anchors.
+
+    Args:
+        pattern: The SQL LIKE pattern.
+
+    Returns:
+        An anchored regex string equivalent to the LIKE pattern.
+    """
+    # Split pattern into tokens: literal parts and wildcards
+    parts: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i] == "%":
+            parts.append(".*")
+            i += 1
+        elif pattern[i] == "_":
+            parts.append(".")
+            i += 1
+        else:
+            # Collect consecutive literal characters
+            j = i
+            while j < len(pattern) and pattern[j] not in ("%", "_"):
+                j += 1
+            parts.append(re.escape(pattern[i:j]))
+            i = j
+    return "^" + "".join(parts) + "$"
 
 
 # Mapping from ADP PredicateOperator to MongoDB query operators.

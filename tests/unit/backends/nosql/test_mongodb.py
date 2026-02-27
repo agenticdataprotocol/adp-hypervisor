@@ -1,5 +1,6 @@
 """Tests for MongoDB backend."""
 
+import re
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,11 +25,15 @@ from backends.nosql.mongodb import MongoDBBackend
 # Test helpers
 # =============================================================================
 
+_RESOURCE_ID = "test-resource"
+_SOURCE = "users"
+
 
 def _make_definition(backend_id: str = "test_mongo") -> BackendDefinition:
     return BackendDefinition(
         id=backend_id,
         type=BackendType.NOSQL,
+        provider="mongodb",
         config=NOSQLBackendConfig(type="NOSQL"),
     )
 
@@ -41,6 +46,16 @@ def _make_mock_collection() -> MagicMock:
     mock_coll.find.return_value = mock_cursor
     mock_coll.aggregate.return_value = mock_cursor
     return mock_coll
+
+
+def _mock_manifest_index() -> MagicMock:
+    """Create a mock ManifestIndex that resolves _RESOURCE_ID → _SOURCE."""
+    mock_index = MagicMock()
+    mock_resource = MagicMock()
+    mock_resource.source_definition.source = _SOURCE
+    mock_resource.resource_id = _RESOURCE_ID
+    mock_index.get_resource.return_value = mock_resource
+    return mock_index
 
 
 # =============================================================================
@@ -208,7 +223,8 @@ class TestQueryExecution(unittest.IsolatedAsyncioTestCase):
 
 
 class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
-    async def test_lookup_by_id(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_lookup_by_id(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -224,14 +240,16 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="_id", value="507f1f77bcf86cd799439011"),
         )
-        result = await backend.execute("users", intent)
+        result = await backend.execute(intent)
 
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
 
-    async def test_lookup_with_projections(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_lookup_with_projections(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -247,10 +265,11 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="name", value="Alice"),
             projections=["name"],
         )
-        result = await backend.execute("users", intent)
+        result = await backend.execute(intent)
 
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
@@ -262,7 +281,8 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
 
 
 class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
-    async def test_query_with_filter(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_query_with_filter(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -278,6 +298,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -285,12 +306,13 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await backend.execute("users", intent)
+        result = await backend.execute(intent)
 
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
 
-    async def test_query_with_order_and_limit(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_query_with_order_and_limit(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -304,6 +326,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -313,12 +336,13 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=10,
         )
-        await backend.execute("users", intent)
+        await backend.execute(intent)
 
         mock_cursor.sort.assert_called_once()
         mock_cursor.limit.assert_called_once_with(10)
 
-    async def test_query_in_operator(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_query_in_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -330,6 +354,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -337,14 +362,15 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        await backend.execute("users", intent)
+        await backend.execute(intent)
 
         # Verify find was called with correct filter
         call_args = mock_coll.find.call_args
         self.assertIn("name", call_args[0][0])
         self.assertIn("$in", call_args[0][0]["name"])
 
-    async def test_query_contains_operator(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_query_contains_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
         backend._db = mock_db
@@ -356,6 +382,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         mock_db.__getitem__.return_value = mock_coll
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -363,7 +390,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        await backend.execute("users", intent)
+        await backend.execute(intent)
 
         # Verify find was called with regex
         call_args = mock_coll.find.call_args
@@ -377,22 +404,26 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
 
 class TestValidate(unittest.IsolatedAsyncioTestCase):
-    async def test_validate_valid_lookup(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_validate_valid_lookup(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="id", value=1),
         )
-        issues = await backend.validate("users", intent)
+        issues = await backend.validate(intent)
 
         self.assertEqual(issues, [])
 
-    async def test_validate_valid_query(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_validate_valid_query(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -400,15 +431,17 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        issues = await backend.validate("users", intent)
+        issues = await backend.validate(intent)
 
         self.assertEqual(issues, [])
 
-    async def test_validate_invalid_in_operator(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_validate_invalid_in_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -416,7 +449,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        issues = await backend.validate("users", intent)
+        issues = await backend.validate(intent)
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0].severity, "BLOCKING")
@@ -428,19 +461,22 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
 
 
 class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
-    async def test_ingest_not_supported(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_ingest_not_supported(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
-            await backend.execute("users", intent)
+            await backend.execute(intent)
 
-    async def test_revise_not_supported(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_revise_not_supported(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
         intent = ReviseIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -450,14 +486,15 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
             payload={"name": "Updated"},
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
-            await backend.execute("users", intent)
+            await backend.execute(intent)
 
-    async def test_validate_ingest_returns_issue(self) -> None:
+    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    async def test_validate_ingest_returns_issue(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
 
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        issues = await backend.validate("users", intent)
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
+        issues = await backend.validate(intent)
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0].severity, "BLOCKING")
@@ -500,3 +537,112 @@ class TestHelperMethods(unittest.TestCase):
         self.assertEqual(backend._infer_field_type({"list"}), FieldType.JSON)
         self.assertEqual(backend._infer_field_type({"dict"}), FieldType.JSON)
         self.assertEqual(backend._infer_field_type({"ObjectId"}), FieldType.STRING)
+
+    def test_infer_field_type_mixed_int_float_returns_float(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        self.assertEqual(backend._infer_field_type({"int", "float"}), FieldType.FLOAT)
+
+    def test_normalize_document_objectid_in_list(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        oid = ObjectId("507f1f77bcf86cd799439011")
+        doc = {"refs": [oid, "plain", 42]}
+
+        normalized = backend._normalize_document(doc)
+
+        self.assertEqual(normalized["refs"][0], "507f1f77bcf86cd799439011")
+        self.assertEqual(normalized["refs"][1], "plain")
+        self.assertEqual(normalized["refs"][2], 42)
+
+    def test_normalize_filter_id_with_eq_operator(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        filt = {"_id": {"$eq": "507f1f77bcf86cd799439011"}}
+        result = backend._normalize_filter(filt)
+        self.assertIsInstance(result["_id"]["$eq"], ObjectId)
+
+    def test_normalize_filter_id_with_in_operator(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        filt = {"_id": {"$in": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]}}
+        result = backend._normalize_filter(filt)
+        for v in result["_id"]["$in"]:
+            self.assertIsInstance(v, ObjectId)
+
+    def test_normalize_filter_id_direct_string(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        filt = {"_id": "507f1f77bcf86cd799439011"}
+        result = backend._normalize_filter(filt)
+        self.assertIsInstance(result["_id"], ObjectId)
+
+    def test_normalize_filter_non_id_field_unchanged(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        filt = {"name": "Alice"}
+        result = backend._normalize_filter(filt)
+        self.assertEqual(result["name"], "Alice")
+
+
+# =============================================================================
+# Regex Safety Tests
+# =============================================================================
+
+
+class TestRegexSafety(unittest.TestCase):
+    def test_contains_escapes_metacharacters(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        pred = Predicate(field_id="name", op=PredicateOperator.CONTAINS, value="1+1=2")
+        result = backend._translate_predicate(pred)
+        pattern = result["name"]["$regex"]
+        # The pattern should not interpret + as a regex quantifier
+        self.assertNotEqual(pattern, "1+1=2")
+        self.assertIn(r"\+", pattern)
+        # Should match the literal string
+        self.assertIsNotNone(re.search(pattern, "1+1=2"))
+        # Should NOT match "112" (which unescaped + would match)
+        self.assertIsNone(re.search(pattern, "112"))
+
+    def test_like_anchored_exact_match(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        pred = Predicate(field_id="name", op=PredicateOperator.LIKE, value="Alice")
+        result = backend._translate_predicate(pred)
+        pattern = result["name"]["$regex"]
+        self.assertTrue(pattern.startswith("^"))
+        self.assertTrue(pattern.endswith("$"))
+        self.assertIsNotNone(re.match(pattern, "Alice"))
+        self.assertIsNone(re.match(pattern, "Alice Smith"))
+
+    def test_like_wildcards(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        pred = Predicate(field_id="name", op=PredicateOperator.LIKE, value="%Alice%")
+        result = backend._translate_predicate(pred)
+        pattern = result["name"]["$regex"]
+        self.assertIsNotNone(re.match(pattern, "xAlicex"))
+        self.assertIsNotNone(re.match(pattern, "Alice"))
+
+    def test_like_escapes_regex_metacharacters(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        pred = Predicate(field_id="name", op=PredicateOperator.LIKE, value="a.b")
+        result = backend._translate_predicate(pred)
+        pattern = result["name"]["$regex"]
+        self.assertIsNotNone(re.match(pattern, "a.b"))
+        self.assertIsNone(re.match(pattern, "axb"))
+
+    def test_ilike_case_insensitive(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        pred = Predicate(field_id="name", op=PredicateOperator.ILIKE, value="%alice%")
+        result = backend._translate_predicate(pred)
+        self.assertEqual(result["name"]["$options"], "i")
+
+
+# =============================================================================
+# Limit=0 Test
+# =============================================================================
+
+
+class TestLimitZero(unittest.IsolatedAsyncioTestCase):
+    async def test_fetch_documents_limit_zero_returns_empty(self) -> None:
+        backend = MongoDBBackend(definition=_make_definition())
+        mock_db = MagicMock()
+        backend._db = mock_db
+
+        result = await backend.fetch_documents("users", {}, None, None, 0)
+        self.assertEqual(result, [])
+        # find() should not even be called
+        mock_db.__getitem__.return_value.find.assert_not_called()

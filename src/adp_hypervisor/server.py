@@ -64,6 +64,13 @@ def _create_backend(definition: BackendDefinition) -> Backend | None:
             return PgVectorBackend(definition=definition)
         return None
 
+    if definition.type == BackendType.NOSQL:
+        if provider == "mongodb":
+            from backends.nosql.mongodb import MongoDBBackend
+
+            return MongoDBBackend(definition=definition)
+        return None
+
     return None
 
 

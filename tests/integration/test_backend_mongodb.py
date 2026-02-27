@@ -5,6 +5,7 @@ connect, LOOKUP, and QUERY intents end-to-end.
 """
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from testcontainers.mongodb import MongoDbContainer
 
@@ -33,6 +34,19 @@ from backends.nosql.mongodb import MongoDBBackend
 
 _mongo_container = None
 _backend_definition = None
+
+_RESOURCE_ID = "integration-test-resource"
+_SOURCE = "users"
+
+
+def _mock_manifest_index() -> MagicMock:
+    """Create a mock ManifestIndex that resolves _RESOURCE_ID → _SOURCE."""
+    mock_index = MagicMock()
+    mock_resource = MagicMock()
+    mock_resource.source_definition.source = _SOURCE
+    mock_resource.resource_id = _RESOURCE_ID
+    mock_index.get_resource.return_value = mock_resource
+    return mock_index
 
 
 def setUpModule() -> None:
@@ -157,28 +171,43 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
 
     async def test_lookup_by_name(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
         self.assertEqual(result.rows[0]["age"], 30)
 
     async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="name", value="Bob"),
             projections=["name"],
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertNotIn("age", result.rows[0])
 
     async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="name", value="NonExistent"),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 0)
 
 
@@ -211,6 +240,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
     async def test_query_all(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -218,11 +248,16 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 3)
 
     async def test_query_with_filter(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -230,13 +265,18 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_with_order_and_limit(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -246,13 +286,18 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=2,
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertEqual(result.rows[1]["name"], "Alice")
 
     async def test_query_with_projections(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -261,7 +306,11 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
             projections=["name", "age"],
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Charlie")
         self.assertEqual(result.rows[0]["age"], 35)
@@ -269,6 +318,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
     async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -276,11 +326,16 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
 
     async def test_query_in_empty_list_raises(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -289,10 +344,15 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with self.assertRaisesRegex(ValueError, "non-empty list"):
-            await self.backend.execute("users", intent)
+            with patch(
+                "backends.nosql.backend.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)
 
     async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -300,13 +360,18 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_or_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="OR",
                 predicates=[
@@ -315,13 +380,18 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
 
     async def test_query_nested_predicates(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -336,7 +406,11 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        result = await self.backend.execute("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Bob"})
@@ -359,13 +433,19 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
 
     async def test_validate_valid_lookup(self) -> None:
         intent = LookupIntent(
+            resource_id=_RESOURCE_ID,
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
-        issues = await self.backend.validate("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            issues = await self.backend.validate(intent)
         self.assertEqual(issues, [])
 
     async def test_validate_valid_query(self) -> None:
         intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -373,7 +453,11 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
                 ],
             ),
         )
-        issues = await self.backend.validate("users", intent)
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            issues = await self.backend.validate(intent)
         self.assertEqual(issues, [])
 
 
@@ -393,12 +477,17 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         await self.backend.disconnect()
 
     async def test_ingest_not_supported(self) -> None:
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
-            await self.backend.execute("users", intent)
+            with patch(
+                "backends.nosql.backend.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)
 
     async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
+            resource_id=_RESOURCE_ID,
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
@@ -408,10 +497,18 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
             payload={"name": "Updated"},
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
-            await self.backend.execute("users", intent)
+            with patch(
+                "backends.nosql.backend.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)
 
     async def test_validate_ingest_returns_issue(self) -> None:
-        intent = IngestIntent(payload=[{"name": "Dave", "age": 40}])
-        issues = await self.backend.validate("users", intent)
+        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
+        with patch(
+            "backends.nosql.backend.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            issues = await self.backend.validate(intent)
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0].severity, "BLOCKING")

@@ -4,6 +4,8 @@ from backends.nosql.backend import NOSQLBackend
 from backends.nosql.mongodb import MongoDBBackend
 
 __all__ = [
-    "MongoDBBackend",
+    # Base
     "NOSQLBackend",
+    # Implementations
+    "MongoDBBackend",
 ]
