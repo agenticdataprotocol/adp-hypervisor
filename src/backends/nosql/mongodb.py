@@ -16,8 +16,6 @@ from motor import motor_asyncio
 from adp_hypervisor.manifest.index import get_global_manifest_index
 from adp_hypervisor.manifest.physical import BackendDefinition, NOSQLBackendConfig
 from adp_hypervisor.protocol.types import (
-    Field,
-    FieldType,
     IngestIntent,
     Intent,
     IssueSeverity,
@@ -36,20 +34,6 @@ from backends.credentials import CredentialResolutionError, resolve_credential
 from backends.nosql.backend import NOSQLBackend
 
 logger = logging.getLogger(__name__)
-
-# Mapping from Python type names to ADP FieldType.
-_TYPE_MAP: dict[str, FieldType] = {
-    "str": FieldType.STRING,
-    "int": FieldType.INTEGER,
-    "float": FieldType.FLOAT,
-    "bool": FieldType.BOOLEAN,
-    "list": FieldType.JSON,
-    "dict": FieldType.JSON,
-    "datetime": FieldType.TIMESTAMP,
-    "date": FieldType.DATE,
-    "bytes": FieldType.BLOB,
-    "ObjectId": FieldType.STRING,
-}
 
 # Mapping from ADP PredicateOperator to MongoDB query operators.
 _OPERATOR_MAP: dict[PredicateOperator, str] = {
@@ -96,60 +80,6 @@ class MongoDBBackend(NOSQLBackend):
             self._client = None
             self._db = None
             logger.info("MongoDB disconnected for %s", self.backend_id)
-
-    # ------------------------------------------------------------------
-    # Schema discovery
-    # ------------------------------------------------------------------
-
-    async def get_schema(self, source: str) -> list[Field]:
-        """Sample documents and infer schema.
-
-        Args:
-            source: The collection name.
-
-        Returns:
-            List of field definitions inferred from sampled documents.
-        """
-        db = self._require_db()
-        collection = db[source]
-
-        # Sample documents
-        pipeline = [{"$sample": {"size": 100}}]
-        cursor = collection.aggregate(pipeline)
-        docs = await cursor.to_list(length=100)
-
-        if not docs:
-            logger.warning("No documents found in collection %s", source)
-            return []
-
-        # Analyze fields
-        field_stats: dict[str, dict[str, Any]] = {}
-        for doc in docs:
-            for key, value in doc.items():
-                if key not in field_stats:
-                    field_stats[key] = {
-                        "types": set(),
-                        "samples": [],
-                        "count": 0,
-                    }
-                field_stats[key]["types"].add(type(value).__name__)
-                field_stats[key]["count"] += 1
-                if len(field_stats[key]["samples"]) < 3:
-                    field_stats[key]["samples"].append(self._serialize_value(value))
-
-        # Build Field list
-        fields: list[Field] = []
-        for field_id, stats in field_stats.items():
-            field_type = self._infer_field_type(stats["types"])
-            fields.append(
-                Field(
-                    field_id=field_id,
-                    type=field_type,
-                    samples=stats["samples"],
-                )
-            )
-
-        return fields
 
     # ------------------------------------------------------------------
     # Backend interface implementation
@@ -536,53 +466,6 @@ class MongoDBBackend(NOSQLBackend):
             return ObjectId(value)
         except Exception:
             return value
-
-    def _serialize_value(self, value: Any) -> Any:
-        """Serialize value for samples.
-
-        Args:
-            value: The value to serialize.
-
-        Returns:
-            Serialized value suitable for JSON.
-        """
-        if isinstance(value, ObjectId):
-            return str(value)
-        elif isinstance(value, (dict, list)):
-            return str(value)[:50]  # Truncate complex types
-        return value
-
-    def _infer_field_type(self, type_names: set[str]) -> FieldType:
-        """Infer ADP FieldType from Python type names.
-
-        Args:
-            type_names: Set of Python type names observed for this field.
-
-        Returns:
-            The inferred ADP FieldType.
-        """
-        # If multiple types, prefer more specific types
-        if "ObjectId" in type_names:
-            return FieldType.STRING
-        if "datetime" in type_names:
-            return FieldType.TIMESTAMP
-        if "date" in type_names:
-            return FieldType.DATE
-        if "bool" in type_names:
-            return FieldType.BOOLEAN
-        if "float" in type_names:
-            return FieldType.FLOAT
-        if "int" in type_names:
-            return FieldType.INTEGER
-        if "str" in type_names:
-            return FieldType.STRING
-        if "list" in type_names or "dict" in type_names:
-            return FieldType.JSON
-        if "bytes" in type_names:
-            return FieldType.BLOB
-
-        # Default to STRING
-        return FieldType.STRING
 
 
 def _inject_password(uri: str, password: str) -> str:

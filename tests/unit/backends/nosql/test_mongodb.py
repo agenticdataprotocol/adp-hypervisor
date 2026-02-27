@@ -8,7 +8,6 @@ from bson import ObjectId
 
 from adp_hypervisor.manifest.physical import BackendDefinition, BackendType, NOSQLBackendConfig
 from adp_hypervisor.protocol.types import (
-    FieldType,
     IdentityPredicate,
     IngestIntent,
     LookupIntent,
@@ -116,57 +115,6 @@ class TestMongoDBBackendConnection(unittest.IsolatedAsyncioTestCase):
     async def test_disconnect_when_not_connected(self) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         await backend.disconnect()  # should not raise
-
-
-# =============================================================================
-# Schema Discovery Tests
-# =============================================================================
-
-
-class TestSchemaDiscovery(unittest.IsolatedAsyncioTestCase):
-    async def test_get_schema(self) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        mock_db = MagicMock()
-        backend._db = mock_db
-
-        # Mock collection with sample documents
-        mock_coll = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(
-            return_value=[
-                {"_id": ObjectId(), "name": "Alice", "age": 30, "active": True},
-                {"_id": ObjectId(), "name": "Bob", "age": 25, "active": False},
-            ]
-        )
-        mock_coll.aggregate.return_value = mock_cursor
-        mock_db.__getitem__.return_value = mock_coll
-
-        fields = await backend.get_schema("users")
-
-        self.assertEqual(len(fields), 4)
-        field_map = {f.field_id: f for f in fields}
-        self.assertIn("_id", field_map)
-        self.assertIn("name", field_map)
-        self.assertIn("age", field_map)
-        self.assertIn("active", field_map)
-        self.assertEqual(field_map["name"].type, FieldType.STRING)
-        self.assertEqual(field_map["age"].type, FieldType.INTEGER)
-        self.assertEqual(field_map["active"].type, FieldType.BOOLEAN)
-
-    async def test_get_schema_empty_collection(self) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        mock_db = MagicMock()
-        backend._db = mock_db
-
-        mock_coll = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[])
-        mock_coll.aggregate.return_value = mock_cursor
-        mock_db.__getitem__.return_value = mock_coll
-
-        fields = await backend.get_schema("empty")
-
-        self.assertEqual(len(fields), 0)
 
 
 # =============================================================================
@@ -526,21 +474,6 @@ class TestHelperMethods(unittest.TestCase):
 
         self.assertEqual(normalized["_id"], "507f1f77bcf86cd799439011")
         self.assertEqual(normalized["profile"]["_id"], "507f1f77bcf86cd799439012")
-
-    def test_infer_field_type(self) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-
-        self.assertEqual(backend._infer_field_type({"str"}), FieldType.STRING)
-        self.assertEqual(backend._infer_field_type({"int"}), FieldType.INTEGER)
-        self.assertEqual(backend._infer_field_type({"float"}), FieldType.FLOAT)
-        self.assertEqual(backend._infer_field_type({"bool"}), FieldType.BOOLEAN)
-        self.assertEqual(backend._infer_field_type({"list"}), FieldType.JSON)
-        self.assertEqual(backend._infer_field_type({"dict"}), FieldType.JSON)
-        self.assertEqual(backend._infer_field_type({"ObjectId"}), FieldType.STRING)
-
-    def test_infer_field_type_mixed_int_float_returns_float(self) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        self.assertEqual(backend._infer_field_type({"int", "float"}), FieldType.FLOAT)
 
     def test_normalize_document_objectid_in_list(self) -> None:
         backend = MongoDBBackend(definition=_make_definition())

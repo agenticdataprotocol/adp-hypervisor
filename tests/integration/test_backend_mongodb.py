@@ -15,7 +15,6 @@ from adp_hypervisor.manifest.physical import (
     NOSQLBackendConfig,
 )
 from adp_hypervisor.protocol.types import (
-    FieldType,
     IdentityPredicate,
     IngestIntent,
     LookupIntent,
@@ -101,44 +100,6 @@ class TestConnection(unittest.IsolatedAsyncioTestCase):
     async def test_disconnect_when_not_connected(self) -> None:
         be = MongoDBBackend(definition=_backend_definition)
         await be.disconnect()  # should not raise
-
-
-# =============================================================================
-# Schema Discovery Tests
-# =============================================================================
-
-
-class TestSchemaDiscovery(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self) -> None:
-        """Set up backend and seed data for each test."""
-        self.backend = MongoDBBackend(definition=_backend_definition)
-        await self.backend.connect()
-
-        # Seed the test collection
-        db = self.backend._db
-        collection = db["users"]
-        await collection.delete_many({})
-        await collection.insert_many(
-            [
-                {"name": "Alice", "age": 30},
-                {"name": "Bob", "age": 25},
-                {"name": "Charlie", "age": 35},
-            ]
-        )
-
-    async def asyncTearDown(self) -> None:
-        """Disconnect backend after each test."""
-        await self.backend.disconnect()
-
-    async def test_get_schema(self) -> None:
-        fields = await self.backend.get_schema("users")
-        self.assertGreaterEqual(len(fields), 3)
-
-        field_map = {f.field_id: f for f in fields}
-        self.assertIn("name", field_map)
-        self.assertIn("age", field_map)
-        self.assertEqual(field_map["name"].type, FieldType.STRING)
-        self.assertEqual(field_map["age"].type, FieldType.INTEGER)
 
 
 # =============================================================================
