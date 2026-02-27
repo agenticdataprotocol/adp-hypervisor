@@ -345,6 +345,29 @@ class TestSimilarSQLGeneration(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not supported inside OR groups"):
             self.backend._build_query_sql("documents", intent)
 
+    def test_nested_similar_raises(self) -> None:
+        intent = QueryIntent(
+            resource_id=_RESOURCE_ID,
+            predicates=PredicateGroup(
+                op="AND",
+                predicates=[
+                    Predicate(field_id="category", op=PredicateOperator.EQ, value="tech"),
+                    PredicateGroup(
+                        op="AND",
+                        predicates=[
+                            Predicate(
+                                field_id="embedding",
+                                op=PredicateOperator.SIMILAR,
+                                value=SimilarValue(vector=[0.1, 0.2], top=5),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "top level"):
+            self.backend._build_query_sql("documents", intent)
+
     def test_multiple_similar_predicates(self) -> None:
         intent = QueryIntent(
             resource_id=_RESOURCE_ID,

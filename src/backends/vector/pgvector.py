@@ -12,7 +12,12 @@ from typing import Any
 import asyncpg
 
 from adp_hypervisor.manifest.physical import BackendDefinition, VectorBackendConfig
-from adp_hypervisor.protocol.types import QueryIntent
+from adp_hypervisor.protocol.types import (
+    Predicate,
+    PredicateGroup,
+    PredicateOperator,
+    QueryIntent,
+)
 from backends.credentials import CredentialResolutionError, resolve_credential
 from backends.rdbms.backend import RDBMSBackend
 from backends.vector.backend import VectorBackend
@@ -141,6 +146,10 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
         """
         similar_preds, remaining_group = self._extract_similar(intent.predicates)
 
+        # Reject SIMILAR predicates nested inside sub-groups — only top-level
+        # SIMILAR predicates are supported.
+        self._reject_nested_similar(intent.predicates)
+
         if not similar_preds:
             return super()._build_query_sql(source, intent)
 
@@ -176,7 +185,7 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
                 params.append(sv.threshold)
                 threshold_ph = self.placeholder(len(params))
                 distance_ceiling = _THRESHOLD_EXPR[fn].format(ph=threshold_ph)
-                conjunction = " AND " if where or "WHERE" in sql else " WHERE "
+                conjunction = " AND " if where else " WHERE "
                 sql += f"{conjunction}{order_expr} < {distance_ceiling}"
                 where = where or "applied"
 
@@ -197,6 +206,19 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _reject_nested_similar(group: PredicateGroup) -> None:
+        """Raise ``ValueError`` if any SIMILAR predicate is nested inside a sub-group."""
+        for pred in group.predicates:
+            if isinstance(pred, PredicateGroup):
+                for child in pred.predicates:
+                    if isinstance(child, Predicate) and child.op == PredicateOperator.SIMILAR:
+                        raise ValueError(
+                            "SIMILAR predicates must be at the top level of the predicate tree"
+                        )
+                # Recurse deeper
+                PgVectorBackend._reject_nested_similar(pred)
+
+    @staticmethod
     def _format_vector(vector: list[float]) -> str:
         """Format a float list as a pgvector literal string, e.g. ``'[0.1,0.2,0.3]'``."""
         return "[" + ",".join(str(v) for v in vector) + "]"
@@ -211,7 +233,8 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
     def _resolve_dsn(self) -> str:
         """Build the DSN, resolving credentials if configured."""
         config = self._definition.config
-        assert isinstance(config, VectorBackendConfig)
+        if not isinstance(config, VectorBackendConfig):
+            raise TypeError(f"Expected VectorBackendConfig, got {type(config).__name__!r}")
         dsn = config.endpoint or ""
         if self._definition.credentials is not None:
             try:
