@@ -5,10 +5,10 @@ connect, LOOKUP, and QUERY intents end-to-end.
 """
 
 import unittest
+from unittest.mock import patch
 
 from testcontainers.postgres import PostgresContainer
 
-from adp_hypervisor.manifest.index import set_global_manifest_index
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendType,
@@ -66,8 +66,6 @@ def setUpModule() -> None:
         provider="postgresql",
         config=RDBMSBackendConfig(uri=dsn),
     )
-    # Configure a minimal global ManifestIndex stub for backend lookups.
-    set_global_manifest_index(_TestManifestIndex())
 
 
 def tearDownModule() -> None:
@@ -124,6 +122,11 @@ class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
     backend: PostgresBackend
 
     async def asyncSetUp(self) -> None:
+        self._manifest_patch = patch(
+            "backends.rdbms.backend.get_global_manifest_index",
+            return_value=_TestManifestIndex(),
+        )
+        self._manifest_patch.start()
         self.backend = PostgresBackend(definition=_get_backend_definition())
         await self.backend.connect()
         pool = self.backend._pool
@@ -133,6 +136,7 @@ class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         await self.backend.disconnect()
+        self._manifest_patch.stop()
 
 
 # =============================================================================

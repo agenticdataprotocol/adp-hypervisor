@@ -439,28 +439,39 @@ def _inject_password(uri: str, password: str) -> str:
     """Inject password into a MongoDB URI.
 
     Uses ``urllib.parse`` to safely handle special characters in passwords
-    and complex URI formats.
+    and complex URI formats, while preserving the original host list.
 
     Args:
         uri: The MongoDB connection URI.
         password: The password to inject.
 
     Returns:
-        The URI with the password injected.
+        The URI with the password injected, or the original URI if it does
+        not contain a username.
     """
     parsed = urllib.parse.urlparse(uri)
-    if not parsed.scheme or not parsed.hostname:
+
+    # Require a scheme and authority; otherwise, leave URI unchanged.
+    if not parsed.scheme or not parsed.netloc:
         return uri
 
-    # Extract username from existing netloc or use empty string
-    username = parsed.username or ""
+    # Only inject a password if a username is present.
+    if not parsed.username:
+        return uri
 
-    replaced = parsed._replace(
-        netloc=f"{urllib.parse.quote(username, safe='')}"
-        f":{urllib.parse.quote(password, safe='')}"
-        f"@{parsed.hostname}"
-        f"{f':{parsed.port}' if parsed.port else ''}"
-    )
+    # Preserve the original host list and any ports (e.g. replica set URIs).
+    # parsed.netloc is of the form: "[userinfo@]hosts"
+    if "@" not in parsed.netloc:
+        return uri
+
+    _userinfo, hosts = parsed.netloc.split("@", 1)
+
+    username_quoted = urllib.parse.quote(parsed.username, safe="")
+    password_quoted = urllib.parse.quote(password, safe="")
+
+    new_netloc = f"{username_quoted}:{password_quoted}@{hosts}"
+
+    replaced = parsed._replace(netloc=new_netloc)
     return urllib.parse.urlunparse(replaced)
 
 

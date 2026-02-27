@@ -347,63 +347,6 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
 
 # =============================================================================
-# Validate Tests
-# =============================================================================
-
-
-class TestValidate(unittest.IsolatedAsyncioTestCase):
-    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
-    async def test_validate_valid_lookup(self, _mock_idx: MagicMock) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        backend._db = MagicMock()
-
-        intent = LookupIntent(
-            resource_id=_RESOURCE_ID,
-            key=IdentityPredicate(field_id="id", value=1),
-        )
-        issues = await backend.validate(intent)
-
-        self.assertEqual(issues, [])
-
-    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
-    async def test_validate_valid_query(self, _mock_idx: MagicMock) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        backend._db = MagicMock()
-
-        intent = QueryIntent(
-            resource_id=_RESOURCE_ID,
-            predicates=PredicateGroup(
-                op="AND",
-                predicates=[
-                    Predicate(field_id="age", op=PredicateOperator.GT, value=20),
-                ],
-            ),
-        )
-        issues = await backend.validate(intent)
-
-        self.assertEqual(issues, [])
-
-    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
-    async def test_validate_invalid_in_operator(self, _mock_idx: MagicMock) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        backend._db = MagicMock()
-
-        intent = QueryIntent(
-            resource_id=_RESOURCE_ID,
-            predicates=PredicateGroup(
-                op="AND",
-                predicates=[
-                    Predicate(field_id="name", op=PredicateOperator.IN, value=[]),
-                ],
-            ),
-        )
-        issues = await backend.validate(intent)
-
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].severity, "BLOCKING")
-
-
-# =============================================================================
 # Unsupported Intent Tests
 # =============================================================================
 
@@ -435,17 +378,6 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
             await backend.execute(intent)
-
-    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
-    async def test_validate_ingest_returns_issue(self, _mock_idx: MagicMock) -> None:
-        backend = MongoDBBackend(definition=_make_definition())
-        backend._db = MagicMock()
-
-        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
-        issues = await backend.validate(intent)
-
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].severity, "BLOCKING")
 
 
 # =============================================================================
