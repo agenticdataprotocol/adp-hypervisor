@@ -1,8 +1,7 @@
 """
 MongoDB backend implementation.
 
-Uses motor (async MongoDB driver) for connection pooling and schema discovery
-via document sampling.
+Uses motor (async MongoDB driver) for connection pooling.
 """
 
 import logging
