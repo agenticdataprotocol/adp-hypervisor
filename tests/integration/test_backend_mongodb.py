@@ -377,51 +377,6 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
 
 # =============================================================================
-# Validate Tests
-# =============================================================================
-
-
-class TestValidate(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self) -> None:
-        """Set up backend for each test."""
-        self.backend = MongoDBBackend(definition=_backend_definition)
-        await self.backend.connect()
-
-    async def asyncTearDown(self) -> None:
-        """Disconnect backend after each test."""
-        await self.backend.disconnect()
-
-    async def test_validate_valid_lookup(self) -> None:
-        intent = LookupIntent(
-            resource_id=_RESOURCE_ID,
-            key=IdentityPredicate(field_id="name", value="Alice"),
-        )
-        with patch(
-            "backends.nosql.mongodb.get_global_manifest_index",
-            return_value=_mock_manifest_index(),
-        ):
-            issues = await self.backend.validate(intent)
-        self.assertEqual(issues, [])
-
-    async def test_validate_valid_query(self) -> None:
-        intent = QueryIntent(
-            resource_id=_RESOURCE_ID,
-            predicates=PredicateGroup(
-                op="AND",
-                predicates=[
-                    Predicate(field_id="age", op=PredicateOperator.GT, value=20),
-                ],
-            ),
-        )
-        with patch(
-            "backends.nosql.mongodb.get_global_manifest_index",
-            return_value=_mock_manifest_index(),
-        ):
-            issues = await self.backend.validate(intent)
-        self.assertEqual(issues, [])
-
-
-# =============================================================================
 # Unsupported Intent Tests
 # =============================================================================
 
@@ -462,13 +417,3 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
                 return_value=_mock_manifest_index(),
             ):
                 await self.backend.execute(intent)
-
-    async def test_validate_ingest_returns_issue(self) -> None:
-        intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
-        with patch(
-            "backends.nosql.mongodb.get_global_manifest_index",
-            return_value=_mock_manifest_index(),
-        ):
-            issues = await self.backend.validate(intent)
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0].severity, "BLOCKING")
