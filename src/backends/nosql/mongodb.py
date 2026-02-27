@@ -18,7 +18,6 @@ from adp_hypervisor.manifest.physical import BackendDefinition, NOSQLBackendConf
 from adp_hypervisor.protocol.types import (
     IngestIntent,
     Intent,
-    IssueSeverity,
     LogicOperator,
     LookupIntent,
     Predicate,
@@ -26,8 +25,6 @@ from adp_hypervisor.protocol.types import (
     PredicateOperator,
     QueryIntent,
     ReviseIntent,
-    ValidationIssue,
-    ValidationIssueCode,
 )
 from backends.base import BackendResult
 from backends.credentials import CredentialResolutionError, resolve_credential
@@ -84,36 +81,6 @@ class MongoDBBackend(NOSQLBackend):
     # ------------------------------------------------------------------
     # Backend interface implementation
     # ------------------------------------------------------------------
-
-    async def validate(self, intent: Intent) -> list[ValidationIssue]:
-        """Validate an intent by building the query without executing it.
-
-        Args:
-            intent: The intent to validate.
-
-        Returns:
-            A list of validation issues. An empty list means the intent is valid.
-        """
-        try:
-            manifest_index = get_global_manifest_index()
-            resource = manifest_index.get_resource(intent.resource_id)
-            if resource is None:
-                raise ValueError(
-                    f"Resource not found for intent.resource_id={intent.resource_id!r}"
-                )
-            source = resource.source_definition.source
-            if not source:
-                raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
-            self._intent_to_query(source, intent)
-        except Exception as exc:
-            return [
-                ValidationIssue(
-                    code=ValidationIssueCode.INVALID_FORMAT,
-                    severity=IssueSeverity.BLOCKING,
-                    message=str(exc),
-                )
-            ]
-        return []
 
     async def execute(self, intent: Intent) -> BackendResult:
         """Translate intent to query and execute it.
