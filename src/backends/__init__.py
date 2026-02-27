@@ -5,6 +5,8 @@ from backends.credentials import CredentialResolutionError, resolve_credential
 from backends.rdbms.backend import RDBMSBackend
 from backends.rdbms.postgres import PostgresBackend
 from backends.registry import BackendRegistry
+from backends.vector.backend import VectorBackend
+from backends.vector.pgvector import PgVectorBackend
 
 __all__ = [
     # Base
@@ -18,4 +20,7 @@ __all__ = [
     # RDBMS
     "RDBMSBackend",
     "PostgresBackend",
+    # Vector
+    "VectorBackend",
+    "PgVectorBackend",
 ]

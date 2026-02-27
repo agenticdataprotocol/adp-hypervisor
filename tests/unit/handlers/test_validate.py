@@ -413,7 +413,7 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
                     {
                         "fieldId": "name",
                         "op": "SIMILAR",
-                        "value": {"text": "search text"},
+                        "value": {"vector": [0.1, 0.2, 0.3]},
                     },
                     {"fieldId": "amount", "op": "GT", "value": 0},
                 ]
