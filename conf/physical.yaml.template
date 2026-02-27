@@ -30,15 +30,6 @@ backends:
   #     type: "env"
   #     key: "PG_PASSWORD"
 
-  # S3 Backend Example
-  # - id: "my_storage"
-  #   type: "S3"
-  #   provider: "s3"               # required: implementation variant (e.g. s3, minio)
-  #   config:
-  #     type: "S3"
-  #     uri: "s3://my-bucket/"
-  #     region: "us-east-1"
-
   # MongoDB Backend Example
   # - id: "my_mongodb"
   #   type: "NOSQL"
@@ -50,3 +41,16 @@ backends:
   #   credentials:
   #     type: "env"
   #     key: "MONGO_PASSWORD"
+
+  # Local Filesystem Backend Example
+  # - id: "local_files"
+  #   type: "BLOB_STORAGE"
+  #   provider: "local"            # required: "local" for POSIX-compliant file systems
+  #   config:
+  #     type: "BLOB_STORAGE"
+  #     uri: "/data/files"         # required: root directory path
+  #     allowSymlinks: false       # optional: allow following symlinks (default: false)
+  #     ignorePatterns:            # optional: gitignore-style glob patterns
+  #       - "*.tmp"
+  #       - ".git"
+  #     autoCreateSource: true     # optional: auto-create source directories (default: true)

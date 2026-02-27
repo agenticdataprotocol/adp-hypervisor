@@ -1,6 +1,7 @@
 """ADP Backend implementations."""
 
 from backends.base import Backend, BackendResult
+from backends.blob_storage.local import LocalFSBackend
 from backends.credentials import CredentialResolutionError, resolve_credential
 from backends.rdbms.backend import RDBMSBackend
 from backends.rdbms.postgres import PostgresBackend
@@ -23,4 +24,6 @@ __all__ = [
     # Vector
     "VectorBackend",
     "PgVectorBackend",
+    # Blob Storage
+    "LocalFSBackend",
 ]

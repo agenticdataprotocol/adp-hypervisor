@@ -20,7 +20,7 @@ class BackendType(StrEnum):
 
     RDBMS = "RDBMS"
     VECTOR = "VECTOR"
-    S3 = "S3"
+    BLOB_STORAGE = "BLOB_STORAGE"
     NOSQL = "NOSQL"
     GRAPH = "GRAPH"
 
@@ -63,14 +63,37 @@ class VectorBackendConfig(ADPModel):
     dimensions: int | None = PydanticField(default=None, description="Vector dimensions")
 
 
-class S3BackendConfig(ADPModel):
-    """Configuration for S3 backend types."""
+class BlobStorageBackendConfig(ADPModel):
+    """Configuration for blob storage backend types (object storage, file systems, etc.)."""
 
-    type: Literal["S3"] = PydanticField(default="S3", description="Backend type")
-    uri: str = PydanticField(..., description="S3 bucket URI")
-    region: str = PydanticField(..., description="AWS region or equivalent")
+    type: Literal["BLOB_STORAGE"] = PydanticField(
+        default="BLOB_STORAGE", description="Backend type"
+    )
+    uri: str = PydanticField(
+        ...,
+        description=(
+            "URI or path for the storage root. "
+            'Object storage: bucket URI (e.g., "s3://acme-finance-datalake/"). '
+            'File system: root directory path (e.g., "/data/files").'
+        ),
+    )
+    region: str | None = PydanticField(
+        default=None,
+        description="Cloud region (for S3-compatible and other cloud storage services)",
+    )
     endpoint: str | None = PydanticField(
         default=None, description="Endpoint URL for S3-compatible services"
+    )
+    allow_symlinks: bool = PydanticField(
+        default=False,
+        description="Whether to allow following symbolic links (for local file systems)",
+    )
+    ignore_patterns: list[str] | None = PydanticField(
+        default=None, description="Glob patterns for paths to ignore (gitignore-style)"
+    )
+    auto_create_source: bool = PydanticField(
+        default=True,
+        description="Whether to automatically create source directories that do not exist",
     )
 
 
@@ -93,7 +116,7 @@ class GraphBackendConfig(ADPModel):
 BackendConfig = Annotated[
     RDBMSBackendConfig
     | VectorBackendConfig
-    | S3BackendConfig
+    | BlobStorageBackendConfig
     | NOSQLBackendConfig
     | GraphBackendConfig,
     PydanticField(discriminator="type"),

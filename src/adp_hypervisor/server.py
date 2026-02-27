@@ -79,6 +79,13 @@ def _create_backend(definition: BackendDefinition) -> Backend | None:
             return MongoDBBackend(definition=definition)
         return None
 
+    if definition.type == BackendType.BLOB_STORAGE:
+        if provider == "local":
+            from backends.blob_storage.local import LocalFSBackend
+
+            return LocalFSBackend(definition=definition)
+        return None
+
     return None
 
 

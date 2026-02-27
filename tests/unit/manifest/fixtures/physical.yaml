@@ -28,12 +28,12 @@ backends:
       manager: "AWS_SECRETS_MANAGER"
       key: "production/pinecone-api-key"
 
-  # S3 Object Storage Backend
+  # Blob Storage Backend (S3)
   - id: "raw_storage"
-    type: "S3"
+    type: "BLOB_STORAGE"
     provider: "s3"
     config:
-      type: "S3"
+      type: "BLOB_STORAGE"
       uri: "s3://acme-finance-datalake/"
       region: "us-east-1"
     credentials:

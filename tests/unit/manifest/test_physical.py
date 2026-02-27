@@ -6,12 +6,12 @@ from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendProvider,
     BackendType,
+    BlobStorageBackendConfig,
     CredentialReference,
     GraphBackendConfig,
     NOSQLBackendConfig,
     PhysicalManifest,
     RDBMSBackendConfig,
-    S3BackendConfig,
     VectorBackendConfig,
 )
 
@@ -73,12 +73,33 @@ class TestBackendConfigs(unittest.TestCase):
         self.assertEqual(config.index_name, "my-index")
         self.assertEqual(config.dimensions, 1536)
 
-    def test_s3_config(self) -> None:
-        config = S3BackendConfig.model_validate(
-            {"type": "S3", "uri": "s3://my-bucket/", "region": "us-east-1"}
+    def test_blob_storage_config(self) -> None:
+        config = BlobStorageBackendConfig.model_validate(
+            {"type": "BLOB_STORAGE", "uri": "/data/files"}
+        )
+        self.assertEqual(config.uri, "/data/files")
+        self.assertIsNone(config.region)
+        self.assertFalse(config.allow_symlinks)
+        self.assertTrue(config.auto_create_source)
+
+    def test_blob_storage_config_full(self) -> None:
+        config = BlobStorageBackendConfig.model_validate(
+            {
+                "type": "BLOB_STORAGE",
+                "uri": "s3://my-bucket/",
+                "region": "us-east-1",
+                "endpoint": "https://s3.amazonaws.com",
+                "allowSymlinks": True,
+                "ignorePatterns": ["*.tmp"],
+                "autoCreateSource": False,
+            }
         )
         self.assertEqual(config.uri, "s3://my-bucket/")
         self.assertEqual(config.region, "us-east-1")
+        self.assertEqual(config.endpoint, "https://s3.amazonaws.com")
+        self.assertTrue(config.allow_symlinks)
+        self.assertEqual(config.ignore_patterns, ["*.tmp"])
+        self.assertFalse(config.auto_create_source)
 
     def test_nosql_config_extra_fields(self) -> None:
         config = NOSQLBackendConfig.model_validate(
@@ -212,17 +233,17 @@ class TestPhysicalManifest(unittest.TestCase):
             "version": "1.0.0",
             "backends": [
                 {
-                    "id": "s3",
-                    "type": "S3",
-                    "provider": "s3",
-                    "config": {"type": "S3", "uri": "s3://bucket/", "region": "us-east-1"},
+                    "id": "storage",
+                    "type": "BLOB_STORAGE",
+                    "provider": "local",
+                    "config": {"type": "BLOB_STORAGE", "uri": "/data/files"},
                 }
             ],
         }
         manifest = PhysicalManifest.model_validate(data)
         dumped = manifest.model_dump(by_alias=True, exclude_none=True)
-        self.assertEqual(dumped["backends"][0]["config"]["uri"], "s3://bucket/")
-        self.assertEqual(dumped["backends"][0]["provider"], "s3")
+        self.assertEqual(dumped["backends"][0]["config"]["uri"], "/data/files")
+        self.assertEqual(dumped["backends"][0]["provider"], "local")
 
     def test_all_backend_types(self) -> None:
         """Verify all 5 backend types can be parsed."""
@@ -244,9 +265,9 @@ class TestPhysicalManifest(unittest.TestCase):
                     },
                     {
                         "id": "b3",
-                        "type": "S3",
-                        "provider": "s3",
-                        "config": {"type": "S3", "uri": "s3://b/", "region": "us"},
+                        "type": "BLOB_STORAGE",
+                        "provider": "local",
+                        "config": {"type": "BLOB_STORAGE", "uri": "/data/files"},
                     },
                     {
                         "id": "b4",
@@ -270,10 +291,10 @@ class TestPhysicalManifest(unittest.TestCase):
             {
                 BackendType.RDBMS,
                 BackendType.VECTOR,
-                BackendType.S3,
+                BackendType.BLOB_STORAGE,
                 BackendType.NOSQL,
                 BackendType.GRAPH,
             },
         )
         providers = [b.provider for b in manifest.backends]
-        self.assertEqual(set(providers), {"postgresql", "pinecone", "s3", "mongodb", "neo4j"})
+        self.assertEqual(set(providers), {"postgresql", "pinecone", "local", "mongodb", "neo4j"})
