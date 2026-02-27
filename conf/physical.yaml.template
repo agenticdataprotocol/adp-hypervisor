@@ -12,25 +12,23 @@ backends:
   #   provider: "postgresql"       # required: implementation variant (e.g. postgresql, mysql)
   #   config:
   #     type: "RDBMS"
-  #     uri: "postgresql://localhost:5432/mydb"
-  #     schema: "public"
+  #     uri: "postgresql://user@localhost:5432/mydb"
+  #     schema: "public"           # optional: database schema name
   #   credentials:
   #     type: "env"
   #     key: "DB_PASSWORD"
 
-  # Vector Backend Example (Pinecone)
+  # Vector Backend Example (pgvector)
   # - id: "my_vectors"
   #   type: "VECTOR"
-  #   provider: "pinecone"         # required: implementation variant (e.g. pinecone, weaviate)
+  #   provider: "pgvector"         # required: implementation variant (e.g. pgvector)
   #   config:
   #     type: "VECTOR"
-  #     provider: "PINECONE"
-  #     indexName: "my-index"
-  #     endpoint: "https://api.pinecone.io"
+  #     indexName: "embeddings"     # required: index or collection name
+  #     endpoint: "postgresql://user@localhost:5432/mydb"  # PostgreSQL DSN
   #   credentials:
-  #     type: "secret"
-  #     manager: "AWS_SECRETS_MANAGER"
-  #     key: "production/pinecone-api-key"
+  #     type: "env"
+  #     key: "PG_PASSWORD"
 
   # S3 Backend Example
   # - id: "my_storage"

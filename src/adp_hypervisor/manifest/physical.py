@@ -58,7 +58,6 @@ class VectorBackendConfig(ADPModel):
     """Configuration for Vector backend types."""
 
     type: Literal["VECTOR"] = PydanticField(default="VECTOR", description="Backend type")
-    provider: str = PydanticField(..., description="Vector database provider")
     index_name: str = PydanticField(..., description="Index or collection name")
     endpoint: str | None = PydanticField(default=None, description="API endpoint")
     dimensions: int | None = PydanticField(default=None, description="Vector dimensions")

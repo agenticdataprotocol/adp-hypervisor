@@ -37,7 +37,6 @@ def _make_definition() -> BackendDefinition:
         type=BackendType.VECTOR,
         provider="pgvector",
         config=VectorBackendConfig(
-            provider="pgvector",
             index_name="documents",
             endpoint="postgresql://user@localhost/db",
             dimensions=1536,

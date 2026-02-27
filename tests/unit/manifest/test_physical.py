@@ -65,13 +65,11 @@ class TestBackendConfigs(unittest.TestCase):
         config = VectorBackendConfig.model_validate(
             {
                 "type": "VECTOR",
-                "provider": "PINECONE",
                 "indexName": "my-index",
                 "endpoint": "https://api.pinecone.io",
                 "dimensions": 1536,
             }
         )
-        self.assertEqual(config.provider, "PINECONE")
         self.assertEqual(config.index_name, "my-index")
         self.assertEqual(config.dimensions, 1536)
 
@@ -129,7 +127,6 @@ class TestBackend(unittest.TestCase):
                 "provider": "pinecone",
                 "config": {
                     "type": "VECTOR",
-                    "provider": "PINECONE",
                     "indexName": "idx",
                 },
             }
@@ -199,7 +196,6 @@ class TestPhysicalManifest(unittest.TestCase):
                         "provider": "pinecone",
                         "config": {
                             "type": "VECTOR",
-                            "provider": "PINECONE",
                             "indexName": "idx",
                         },
                     },
@@ -244,7 +240,7 @@ class TestPhysicalManifest(unittest.TestCase):
                         "id": "b2",
                         "type": "VECTOR",
                         "provider": "pinecone",
-                        "config": {"type": "VECTOR", "provider": "P", "indexName": "i"},
+                        "config": {"type": "VECTOR", "indexName": "i"},
                     },
                     {
                         "id": "b3",

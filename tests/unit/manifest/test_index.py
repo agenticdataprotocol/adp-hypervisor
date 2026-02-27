@@ -71,7 +71,7 @@ def _make_sample_manifests() -> tuple[PhysicalManifest, SemanticManifest, Policy
                     "id": "vec1",
                     "type": "VECTOR",
                     "provider": "pinecone",
-                    "config": {"type": "VECTOR", "provider": "P", "indexName": "idx"},
+                    "config": {"type": "VECTOR", "indexName": "idx"},
                 },
             ],
         }

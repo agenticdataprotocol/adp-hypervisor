@@ -68,7 +68,6 @@ def setUpModule() -> None:
         type=BackendType.VECTOR,
         provider="pgvector",
         config=VectorBackendConfig(
-            provider="pgvector",
             index_name="documents",
             endpoint=dsn,
             dimensions=3,
