@@ -192,7 +192,7 @@ class TestQueryExecution(unittest.IsolatedAsyncioTestCase):
         mock_coll.find.return_value = mock_cursor
         mock_db.__getitem__.return_value = mock_coll
 
-        docs = await backend.fetch_documents("users", {"name": "Alice"}, {"name": 1}, None, None)
+        docs = await backend._fetch_documents("users", {"name": "Alice"}, {"name": 1}, None, None)
 
         self.assertEqual(len(docs), 1)
         self.assertEqual(docs[0]["name"], "Alice")
@@ -211,7 +211,7 @@ class TestQueryExecution(unittest.IsolatedAsyncioTestCase):
         mock_coll.find.return_value = mock_cursor
         mock_db.__getitem__.return_value = mock_coll
 
-        await backend.fetch_documents("users", {}, None, [("age", 1)], 10)
+        await backend._fetch_documents("users", {}, None, [("age", 1)], 10)
 
         mock_cursor.sort.assert_called_once_with([("age", 1)])
         mock_cursor.limit.assert_called_once_with(10)
@@ -223,7 +223,7 @@ class TestQueryExecution(unittest.IsolatedAsyncioTestCase):
 
 
 class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_lookup_by_id(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -248,7 +248,7 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_lookup_with_projections(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -281,7 +281,7 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
 
 
 class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_query_with_filter(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -311,7 +311,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_query_with_order_and_limit(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -341,7 +341,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         mock_cursor.sort.assert_called_once()
         mock_cursor.limit.assert_called_once_with(10)
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_query_in_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -369,7 +369,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         self.assertIn("name", call_args[0][0])
         self.assertIn("$in", call_args[0][0]["name"])
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_query_contains_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         mock_db = MagicMock()
@@ -404,7 +404,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
 
 
 class TestValidate(unittest.IsolatedAsyncioTestCase):
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_validate_valid_lookup(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -417,7 +417,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(issues, [])
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_validate_valid_query(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -435,7 +435,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(issues, [])
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_validate_invalid_in_operator(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -461,7 +461,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
 
 
 class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_ingest_not_supported(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -470,7 +470,7 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
             await backend.execute(intent)
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_revise_not_supported(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -488,7 +488,7 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
             await backend.execute(intent)
 
-    @patch("backends.nosql.backend.get_global_manifest_index", return_value=_mock_manifest_index())
+    @patch("backends.nosql.mongodb.get_global_manifest_index", return_value=_mock_manifest_index())
     async def test_validate_ingest_returns_issue(self, _mock_idx: MagicMock) -> None:
         backend = MongoDBBackend(definition=_make_definition())
         backend._db = MagicMock()
@@ -642,7 +642,7 @@ class TestLimitZero(unittest.IsolatedAsyncioTestCase):
         mock_db = MagicMock()
         backend._db = mock_db
 
-        result = await backend.fetch_documents("users", {}, None, None, 0)
+        result = await backend._fetch_documents("users", {}, None, None, 0)
         self.assertEqual(result, [])
         # find() should not even be called
         mock_db.__getitem__.return_value.find.assert_not_called()

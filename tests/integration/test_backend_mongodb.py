@@ -68,13 +68,12 @@ def setUpModule() -> None:
         database = "test"
 
     # NOSQLBackendConfig has extra="allow", so we can pass additional fields
-    config = NOSQLBackendConfig.model_validate(
-        {"type": "NOSQL", "uri": uri, "database": database, "provider": "MONGODB"}
-    )
+    config = NOSQLBackendConfig.model_validate({"type": "NOSQL", "uri": uri, "database": database})
 
     _backend_definition = BackendDefinition(
         id="test_mongo",
         type=BackendType.NOSQL,
+        provider="MONGODB",
         config=config,
     )
 
@@ -175,7 +174,7 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -190,7 +189,7 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
             projections=["name"],
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -204,7 +203,7 @@ class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
             key=IdentityPredicate(field_id="name", value="NonExistent"),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -249,7 +248,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -266,7 +265,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -287,7 +286,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             limit=2,
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -307,7 +306,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             projections=["name", "age"],
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -327,7 +326,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -345,7 +344,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(ValueError, "non-empty list"):
             with patch(
-                "backends.nosql.backend.get_global_manifest_index",
+                "backends.nosql.mongodb.get_global_manifest_index",
                 return_value=_mock_manifest_index(),
             ):
                 await self.backend.execute(intent)
@@ -361,7 +360,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -381,7 +380,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -407,7 +406,7 @@ class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             result = await self.backend.execute(intent)
@@ -437,7 +436,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
             key=IdentityPredicate(field_id="name", value="Alice"),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             issues = await self.backend.validate(intent)
@@ -454,7 +453,7 @@ class TestValidate(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             issues = await self.backend.validate(intent)
@@ -480,7 +479,7 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
             with patch(
-                "backends.nosql.backend.get_global_manifest_index",
+                "backends.nosql.mongodb.get_global_manifest_index",
                 return_value=_mock_manifest_index(),
             ):
                 await self.backend.execute(intent)
@@ -498,7 +497,7 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
             with patch(
-                "backends.nosql.backend.get_global_manifest_index",
+                "backends.nosql.mongodb.get_global_manifest_index",
                 return_value=_mock_manifest_index(),
             ):
                 await self.backend.execute(intent)
@@ -506,7 +505,7 @@ class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
     async def test_validate_ingest_returns_issue(self) -> None:
         intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with patch(
-            "backends.nosql.backend.get_global_manifest_index",
+            "backends.nosql.mongodb.get_global_manifest_index",
             return_value=_mock_manifest_index(),
         ):
             issues = await self.backend.validate(intent)

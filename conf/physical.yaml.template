@@ -42,9 +42,9 @@ backends:
   # MongoDB Backend Example
   # - id: "my_mongodb"
   #   type: "NOSQL"
+  #   provider: "MONGODB"             # required: implementation variant (e.g. mongodb)
   #   config:
   #     type: "NOSQL"
-  #     provider: "MONGODB"
   #     uri: "mongodb://localhost:27017"
   #     database: "myapp"
   #   credentials:
