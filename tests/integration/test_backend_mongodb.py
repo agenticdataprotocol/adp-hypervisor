@@ -1,20 +1,19 @@
-"""Integration tests for the PostgreSQL backend.
+"""Integration tests for the MongoDB backend.
 
-Uses testcontainers to spin up a real PostgreSQL instance and exercises
+Uses testcontainers to spin up a real MongoDB instance and exercises
 connect, LOOKUP, and QUERY intents end-to-end.
 """
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from testcontainers.postgres import PostgresContainer
+from testcontainers.mongodb import MongoDbContainer
 
 from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendType,
-    RDBMSBackendConfig,
+    NOSQLBackendConfig,
 )
-from adp_hypervisor.manifest.semantic import CuratedResource
 from adp_hypervisor.protocol.types import (
     IdentityPredicate,
     IngestIntent,
@@ -26,117 +25,63 @@ from adp_hypervisor.protocol.types import (
     ReviseIntent,
     SortOrder,
 )
-from backends.rdbms.postgres import PostgresBackend
+from backends.nosql.mongodb import MongoDBBackend
 
 # =============================================================================
-# Module-level fixtures
+# Module-level container and backend definition
 # =============================================================================
 
-_RESOURCE_ID = "test:users"
+_mongo_container = None
+_backend_definition = None
 
-_TABLE_DDL = """
-CREATE TABLE users (
-    id   SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    age  INTEGER NOT NULL
-);
-INSERT INTO users (name, age) VALUES
-    ('Alice', 30),
-    ('Bob', 25),
-    ('Charlie', 35);
-"""
+_RESOURCE_ID = "integration-test-resource"
+_SOURCE = "users"
 
-_pg_container: PostgresContainer | None = None
-_backend_definition: BackendDefinition | None = None
+
+def _mock_manifest_index() -> MagicMock:
+    """Create a mock ManifestIndex that resolves _RESOURCE_ID → _SOURCE."""
+    mock_index = MagicMock()
+    mock_resource = MagicMock()
+    mock_resource.source_definition.source = _SOURCE
+    mock_resource.resource_id = _RESOURCE_ID
+    mock_index.get_resource.return_value = mock_resource
+    return mock_index
 
 
 def setUpModule() -> None:
-    """Start a PostgreSQL container for the test module."""
-    global _pg_container, _backend_definition  # noqa: PLW0603
-    _pg_container = PostgresContainer("postgres:16-alpine")
-    _pg_container.start()
-    url = _pg_container.get_connection_url()
-    # testcontainers returns a SQLAlchemy-style URL (e.g. postgresql+psycopg2://...);
-    # asyncpg requires a plain postgresql:// scheme.
-    dsn = url.split("://", 1)[-1]
-    dsn = f"postgresql://{dsn}"
+    """Set up MongoDB container for all tests in this module."""
+    global _mongo_container, _backend_definition
+    _mongo_container = MongoDbContainer("mongo:7")
+    _mongo_container.start()
+
+    connection_url = _mongo_container.get_connection_url()
+
+    # MongoDB connection URL format: mongodb://user:pass@host:port or mongodb://user:pass@host:port/database
+    # If there's a database in the URL, extract it; otherwise use "test"
+    if "/" in connection_url.split("://", 1)[1]:
+        # Has database in URL
+        uri, database = connection_url.rsplit("/", 1)
+    else:
+        # No database in URL
+        uri = connection_url
+        database = "test"
+
+    # NOSQLBackendConfig has extra="allow", so we can pass additional fields
+    config = NOSQLBackendConfig.model_validate({"type": "NOSQL", "uri": uri, "database": database})
+
     _backend_definition = BackendDefinition(
-        id="test_pg",
-        type=BackendType.RDBMS,
-        provider="postgresql",
-        config=RDBMSBackendConfig(uri=dsn),
+        id="test_mongo",
+        type=BackendType.NOSQL,
+        provider="MONGODB",
+        config=config,
     )
 
 
 def tearDownModule() -> None:
-    """Stop the PostgreSQL container."""
-    global _pg_container  # noqa: PLW0603
-    if _pg_container is not None:
-        _pg_container.stop()
-        _pg_container = None
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-
-def _get_backend_definition() -> BackendDefinition:
-    """Return the module-level backend definition, raising if not initialised."""
-    if _backend_definition is None:
-        raise RuntimeError("setUpModule was not called")
-    return _backend_definition
-
-
-def _make_resource() -> CuratedResource:
-    """Return a minimal CuratedResource bound to the users table."""
-    backend_def = _get_backend_definition()
-    return CuratedResource.model_validate(
-        {
-            "resourceId": _RESOURCE_ID,
-            "intentClasses": ["*"],
-            "backendId": backend_def.id,
-            "version": 1,
-            "sourceDefinition": {
-                "source": "users",
-            },
-        }
-    )
-
-
-class _TestManifestIndex:
-    """Minimal stub manifest index exposing get_resource for this test module."""
-
-    def __init__(self) -> None:
-        self._resource = _make_resource()
-
-    def get_resource(self, resource_id: str) -> CuratedResource | None:
-        if resource_id == self._resource.resource_id:
-            return self._resource
-        return None
-
-
-class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
-    """Base that creates, seeds, and tears down a PostgresBackend per test."""
-
-    backend: PostgresBackend
-
-    async def asyncSetUp(self) -> None:
-        self._manifest_patch = patch(
-            "backends.rdbms.backend.get_global_manifest_index",
-            return_value=_TestManifestIndex(),
-        )
-        self._manifest_patch.start()
-        self.backend = PostgresBackend(definition=_get_backend_definition())
-        await self.backend.connect()
-        pool = self.backend._pool
-        async with pool.acquire() as conn:
-            await conn.execute("DROP TABLE IF EXISTS users")
-            await conn.execute(_TABLE_DDL)
-
-    async def asyncTearDown(self) -> None:
-        await self.backend.disconnect()
-        self._manifest_patch.stop()
+    """Tear down MongoDB container after all tests."""
+    global _mongo_container
+    if _mongo_container is not None:
+        _mongo_container.stop()
 
 
 # =============================================================================
@@ -146,14 +91,14 @@ class _SeededBackendMixin(unittest.IsolatedAsyncioTestCase):
 
 class TestConnection(unittest.IsolatedAsyncioTestCase):
     async def test_connect_and_disconnect(self) -> None:
-        be = PostgresBackend(definition=_get_backend_definition())
+        be = MongoDBBackend(definition=_backend_definition)
         await be.connect()
-        self.assertIsNotNone(be._pool)
+        self.assertIsNotNone(be._client)
         await be.disconnect()
-        self.assertIsNone(be._pool)
+        self.assertIsNone(be._client)
 
     async def test_disconnect_when_not_connected(self) -> None:
-        be = PostgresBackend(definition=_get_backend_definition())
+        be = MongoDBBackend(definition=_backend_definition)
         await be.disconnect()  # should not raise
 
 
@@ -162,23 +107,53 @@ class TestConnection(unittest.IsolatedAsyncioTestCase):
 # =============================================================================
 
 
-class TestLookupIntent(_SeededBackendMixin):
-    async def test_lookup_by_id(self) -> None:
+class TestLookupIntent(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend and seed data for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+        # Seed the test collection
+        db = self.backend._db
+        collection = db["users"]
+        await collection.delete_many({})
+        await collection.insert_many(
+            [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25},
+                {"name": "Charlie", "age": 35},
+            ]
+        )
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
+    async def test_lookup_by_name(self) -> None:
         intent = LookupIntent(
             resource_id=_RESOURCE_ID,
-            key=IdentityPredicate(field_id="id", value=1),
+            key=IdentityPredicate(field_id="name", value="Alice"),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Alice")
+        self.assertEqual(result.rows[0]["age"], 30)
 
     async def test_lookup_with_projections(self) -> None:
         intent = LookupIntent(
             resource_id=_RESOURCE_ID,
-            key=IdentityPredicate(field_id="id", value=2),
+            key=IdentityPredicate(field_id="name", value="Bob"),
             projections=["name"],
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertNotIn("age", result.rows[0])
@@ -186,9 +161,13 @@ class TestLookupIntent(_SeededBackendMixin):
     async def test_lookup_not_found(self) -> None:
         intent = LookupIntent(
             resource_id=_RESOURCE_ID,
-            key=IdentityPredicate(field_id="id", value=999),
+            key=IdentityPredicate(field_id="name", value="NonExistent"),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 0)
 
 
@@ -197,7 +176,28 @@ class TestLookupIntent(_SeededBackendMixin):
 # =============================================================================
 
 
-class TestQueryIntent(_SeededBackendMixin):
+class TestQueryIntent(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend and seed data for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+        # Seed the test collection
+        db = self.backend._db
+        collection = db["users"]
+        await collection.delete_many({})
+        await collection.insert_many(
+            [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25},
+                {"name": "Charlie", "age": 35},
+            ]
+        )
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
     async def test_query_all(self) -> None:
         intent = QueryIntent(
             resource_id=_RESOURCE_ID,
@@ -208,7 +208,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 3)
 
     async def test_query_with_filter(self) -> None:
@@ -221,7 +225,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
@@ -238,7 +246,11 @@ class TestQueryIntent(_SeededBackendMixin):
             order_by=[SortOrder(field_id="age", direction="ASC")],
             limit=2,
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         self.assertEqual(result.rows[0]["name"], "Bob")
         self.assertEqual(result.rows[1]["name"], "Alice")
@@ -254,11 +266,15 @@ class TestQueryIntent(_SeededBackendMixin):
             ),
             projections=["name", "age"],
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 1)
         self.assertEqual(result.rows[0]["name"], "Charlie")
         self.assertEqual(result.rows[0]["age"], 35)
-        self.assertNotIn("id", result.rows[0])
+        self.assertNotIn("_id", result.rows[0])
 
     async def test_query_in_operator(self) -> None:
         intent = QueryIntent(
@@ -270,7 +286,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
 
     async def test_query_in_empty_list_raises(self) -> None:
@@ -284,7 +304,11 @@ class TestQueryIntent(_SeededBackendMixin):
             ),
         )
         with self.assertRaisesRegex(ValueError, "non-empty list"):
-            await self.backend.execute(intent)
+            with patch(
+                "backends.nosql.mongodb.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)
 
     async def test_query_contains_substring(self) -> None:
         intent = QueryIntent(
@@ -296,7 +320,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
@@ -312,7 +340,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Charlie"})
@@ -334,7 +366,11 @@ class TestQueryIntent(_SeededBackendMixin):
                 ],
             ),
         )
-        result = await self.backend.execute(intent)
+        with patch(
+            "backends.nosql.mongodb.get_global_manifest_index",
+            return_value=_mock_manifest_index(),
+        ):
+            result = await self.backend.execute(intent)
         self.assertEqual(len(result.rows), 2)
         names = {row["name"] for row in result.rows}
         self.assertEqual(names, {"Alice", "Bob"})
@@ -345,11 +381,24 @@ class TestQueryIntent(_SeededBackendMixin):
 # =============================================================================
 
 
-class TestUnsupportedIntents(_SeededBackendMixin):
+class TestUnsupportedIntents(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        """Set up backend for each test."""
+        self.backend = MongoDBBackend(definition=_backend_definition)
+        await self.backend.connect()
+
+    async def asyncTearDown(self) -> None:
+        """Disconnect backend after each test."""
+        await self.backend.disconnect()
+
     async def test_ingest_not_supported(self) -> None:
         intent = IngestIntent(resource_id=_RESOURCE_ID, payload=[{"name": "Dave", "age": 40}])
         with self.assertRaisesRegex(NotImplementedError, "INGEST"):
-            await self.backend.execute(intent)
+            with patch(
+                "backends.nosql.mongodb.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)
 
     async def test_revise_not_supported(self) -> None:
         intent = ReviseIntent(
@@ -357,10 +406,14 @@ class TestUnsupportedIntents(_SeededBackendMixin):
             predicates=PredicateGroup(
                 op="AND",
                 predicates=[
-                    Predicate(field_id="id", op=PredicateOperator.EQ, value=1),
+                    Predicate(field_id="name", op=PredicateOperator.EQ, value="Alice"),
                 ],
             ),
             payload={"name": "Updated"},
         )
         with self.assertRaisesRegex(NotImplementedError, "REVISE"):
-            await self.backend.execute(intent)
+            with patch(
+                "backends.nosql.mongodb.get_global_manifest_index",
+                return_value=_mock_manifest_index(),
+            ):
+                await self.backend.execute(intent)

@@ -54,3 +54,4 @@ htmlcov/
 
 # macOS
 .DS_Store
+.worktrees/
