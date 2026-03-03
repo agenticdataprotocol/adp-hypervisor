@@ -18,11 +18,11 @@
 
 version: "1.0.0"
 
-# Bootstrap Mode (open access, no enforcements):
+# Bootstrap Mode (read-only access for the default role):
 # Please uncomment the below policies before use.
 # policies:
 #   - type: "ACCESS"
 #     resourceSelector: "*"
 #     roles:
 #       - role: default
-#         allowedIntents: ["*"]
+#         allowedIntents: ["LOOKUP", "QUERY"]
