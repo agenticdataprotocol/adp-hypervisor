@@ -122,9 +122,13 @@ class PolicyEnforcer:
         Returns:
             A filtered list containing only accessible resources.
         """
+        cache: dict[str, bool] = {}
         result: list[CuratedResource] = []
         for resource in resources:
-            if self._is_resource_accessible(resource.resource_id, role):
+            rid = resource.resource_id
+            if rid not in cache:
+                cache[rid] = self._is_resource_accessible(rid, role)
+            if cache[rid]:
                 result.append(resource)
         return result
 

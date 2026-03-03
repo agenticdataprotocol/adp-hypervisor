@@ -26,7 +26,7 @@ from adp_hypervisor.manifest.physical import (
     BackendType,
 )
 from adp_hypervisor.manifest.provider import ManifestProvider
-from adp_hypervisor.policy import PolicyEnforcer, RoleResolver, UserRoleConfig
+from adp_hypervisor.policy import PolicyEnforcer, RoleResolver, SimpleAuthResolver, UserRoleConfig
 from adp_hypervisor.protocol.dispatcher import Dispatcher
 from adp_hypervisor.transport.base import Transport
 from adp_hypervisor.transport.stdio import StdioTransport
@@ -99,7 +99,7 @@ class ADPServer:
         """
         self._manifest_provider = manifest_provider
         self._transport = transport or StdioTransport()
-        self._role_resolver = role_resolver or RoleResolver(UserRoleConfig())
+        self._role_resolver = role_resolver or SimpleAuthResolver(UserRoleConfig())
         self._dispatcher = Dispatcher()
         self._backend_registry = BackendRegistry()
         self._manifest_index: ManifestIndex | None = None

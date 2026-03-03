@@ -6,6 +6,7 @@ initialize → ping → discover → describe → validate → execute.
 """
 
 import asyncio
+import base64
 import json
 import tempfile
 import unittest
@@ -134,11 +135,21 @@ def _write_manifest_files(tmpdir: Path, dsn: str) -> None:
             yaml.dump(data, f)
 
 
+def _simple_auth(username: str, password: str = "") -> str:
+    """Build a Simple Auth header value."""
+    return "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
+
+
+_DEFAULT_META: dict[str, str] = {"authorization": _simple_auth("testuser")}
+
+
 def _jsonrpc_request(method: str, params: dict[str, Any] | None = None, rid: int = 1) -> str:
     """Build a JSON-RPC 2.0 request string."""
     msg: dict[str, Any] = {"jsonrpc": "2.0", "id": rid, "method": method}
     if params is not None:
-        msg["params"] = params
+        msg["params"] = {**params, "_meta": _DEFAULT_META}
+    else:
+        msg["params"] = {"_meta": _DEFAULT_META}
     return json.dumps(msg)
 
 

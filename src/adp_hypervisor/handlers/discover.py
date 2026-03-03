@@ -182,8 +182,10 @@ class DiscoverHandler(Handler):
 
         all_resources = self._manifest_index.list_resources()
         role = self._policy_enforcer.resolve_role(params)
-        all_resources = self._policy_enforcer.filter_accessible_resources(all_resources, role)
-        filtered = _apply_filter(all_resources, request.filter)
+        accessible_resources = self._policy_enforcer.filter_accessible_resources(
+            all_resources, role
+        )
+        filtered = _apply_filter(accessible_resources, request.filter)
 
         offset = 0
         if request.cursor is not None:
@@ -198,8 +200,9 @@ class DiscoverHandler(Handler):
             next_cursor = _encode_cursor(offset + self._page_size)
 
         logger.info(
-            "Discover: %d total, %d filtered, returning %d (offset=%d)",
+            "Discover: %d total, %d accessible, %d filtered, returning %d (offset=%d)",
             len(all_resources),
+            len(accessible_resources),
             len(filtered),
             len(page),
             offset,

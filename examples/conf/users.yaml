@@ -1,7 +1,7 @@
 # User-to-Role Configuration — Demo
 #
 # Maps usernames to roles for ACCESS policy enforcement.
-# The "default" role is used when no credentials are provided.
+# The "default" role is used when username is not configured.
 # See policy.yaml for the ACCESS policies that reference these roles.
 
 default_role: "default"

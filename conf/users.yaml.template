@@ -3,15 +3,18 @@
 #
 # Copy this file as users.yaml and customize for your environment.
 #
+# WARNING: Simple Auth extracts the username from the authorization header
+# but does NOT verify the password. Do not rely on it for security.
+#
 # How it works:
 #   1. Client sends _meta.authorization in JSON-RPC request params
 #      (e.g. "Basic base64(username:password)")
-#   2. Server extracts the username from the Basic Auth header
+#   2. Server extracts the username from the Simple Auth header
 #   3. Server looks up the username in this file to determine the role
 #   4. The role is checked against ACCESS policies in policy.yaml
 #
-# If no authorization is provided or the user is not listed below,
-# the default_role is used.
+# Requests without _meta.authorization are rejected.
+# If the username is not listed below, the default_role is used.
 
 default_role: "default"
 
