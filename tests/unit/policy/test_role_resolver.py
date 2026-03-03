@@ -4,7 +4,8 @@ import base64
 import unittest
 
 import adp_hypervisor.protocol.types  # noqa: F401 — pre-load to avoid circular import
-from adp_hypervisor.policy.role_resolver import RoleResolver, SimpleAuthResolver, UserRoleConfig
+from adp_hypervisor.policy.role_resolver import RoleResolver, UserRoleConfig
+from adp_hypervisor.policy.simple_auth_resolver import SimpleAuthResolver
 from adp_hypervisor.protocol.errors import UnauthorizedError
 
 # =============================================================================
