@@ -11,3 +11,15 @@ backends:
     credentials:
       type: "env"
       key: "PG_PASSWORD"
+
+  - id: "pgvector_demo"
+    type: "VECTOR"
+    provider: "pgvector"
+    config:
+      type: "VECTOR"
+      index_name: "items"
+      endpoint: "postgresql://adp_user@localhost:5433/adp_vector_demo"
+      dimensions: 3
+    credentials:
+      type: "env"
+      key: "PG_PASSWORD"
