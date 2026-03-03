@@ -112,9 +112,16 @@ def _write_manifest_files(tmpdir: Path, dsn: str) -> None:
             }
         ],
     }
-    # TODO: Policy enforcement is not yet implemented. Provide a minimal
-    # policy manifest so the YAML provider can load without errors.
-    policy: dict[str, object] = {"version": "1.0.0"}
+    policy: dict[str, object] = {
+        "version": "1.0.0",
+        "policies": [
+            {
+                "type": "ACCESS",
+                "resourceSelector": "*",
+                "roles": [{"role": "default", "allowedIntents": ["*"]}],
+            }
+        ],
+    }
 
     import yaml
 
