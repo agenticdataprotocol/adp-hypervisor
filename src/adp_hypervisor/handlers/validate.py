@@ -13,11 +13,13 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from adp_hypervisor.handlers.base import Handler
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import ResourceNotFoundError
 from adp_hypervisor.protocol.types import (
     Field,
     FieldType,
     IngestIntent,
+    IntentClass,
     IssueSeverity,
     LogicOperator,
     LookupIntent,
@@ -114,13 +116,15 @@ class ValidateHandler(Handler):
     levels indicating whether execution should proceed.
     """
 
-    def __init__(self, manifest_index: ManifestIndex) -> None:
+    def __init__(self, manifest_index: ManifestIndex, policy_enforcer: PolicyEnforcer) -> None:
         """Initialize the handler.
 
         Args:
             manifest_index: The manifest index to look up resources and policies.
+            policy_enforcer: The policy enforcer to check access.
         """
         self._manifest_index = manifest_index
+        self._policy_enforcer = policy_enforcer
 
     @property
     def method(self) -> str:
@@ -145,6 +149,11 @@ class ValidateHandler(Handler):
         resource = self._manifest_index.get_resource(resource_id)
         if resource is None:
             raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
+
+        role = self._policy_enforcer.resolve_role(params)
+        self._policy_enforcer.check_access(
+            request.intent.resource_id, role, IntentClass(request.intent.intent_class)
+        )
 
         fields = self._extract_fields(resource)
         field_map = {f.field_id: f for f in fields}

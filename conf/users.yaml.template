@@ -1,0 +1,22 @@
+# User-to-Role Configuration
+# Maps authenticated usernames to roles used by ACCESS policy enforcement.
+#
+# Copy this file as users.yaml and customize for your environment.
+#
+# How it works:
+#   1. Client sends _meta.authorization in JSON-RPC request params
+#      (e.g. "Basic base64(username:password)")
+#   2. Server extracts the username from the Basic Auth header
+#   3. Server looks up the username in this file to determine the role
+#   4. The role is checked against ACCESS policies in policy.yaml
+#
+# If no authorization is provided or the user is not listed below,
+# the default_role is used.
+
+default_role: "default"
+
+# Uncomment and customize the user-to-role mappings below:
+# users:
+#   admin: "admin"
+#   alice: "analyst"
+#   bob: "viewer"

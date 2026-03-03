@@ -7,9 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 from adp_hypervisor.handlers.execute import ExecuteHandler
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import (
     ExecutionFailedError,
     ResourceNotFoundError,
+    UnauthorizedError,
     ValidationFailedError,
 )
 from adp_hypervisor.protocol.types import (
@@ -83,6 +85,13 @@ def _mock_registry(backend: Backend | None = None) -> BackendRegistry:
     return registry
 
 
+def _mock_policy_enforcer() -> PolicyEnforcer:
+    enforcer = MagicMock(spec=PolicyEnforcer)
+    enforcer.resolve_role.return_value = "default"
+    enforcer.check_access.return_value = None
+    return enforcer
+
+
 def _make_handler(
     resource: CuratedResource | None = None,
     backend: Backend | None = None,
@@ -94,7 +103,9 @@ def _make_handler(
     if backend is None:
         backend = _mock_backend()
     registry = _mock_registry(backend)
-    return ExecuteHandler(manifest_index=manifest, backend_registry=registry)
+    return ExecuteHandler(
+        manifest_index=manifest, backend_registry=registry, policy_enforcer=_mock_policy_enforcer()
+    )
 
 
 def _make_query_params(
@@ -283,7 +294,11 @@ class TestExecuteResourceNotFound(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_resource_raises_error(self) -> None:
         manifest = _mock_manifest(resource=None)
         registry = _mock_registry()
-        handler = ExecuteHandler(manifest_index=manifest, backend_registry=registry)
+        handler = ExecuteHandler(
+            manifest_index=manifest,
+            backend_registry=registry,
+            policy_enforcer=_mock_policy_enforcer(),
+        )
 
         with self.assertRaises(ResourceNotFoundError):
             await handler.handle(_make_query_params(resource_id="unknown:resource"))
@@ -378,7 +393,11 @@ class TestExecuteBackendErrors(unittest.IsolatedAsyncioTestCase):
         resource = _make_resource()
         manifest = _mock_manifest(resource=resource)
         registry = _mock_registry(backend=None)
-        handler = ExecuteHandler(manifest_index=manifest, backend_registry=registry)
+        handler = ExecuteHandler(
+            manifest_index=manifest,
+            backend_registry=registry,
+            policy_enforcer=_mock_policy_enforcer(),
+        )
 
         with self.assertRaises(ExecutionFailedError) as ctx:
             await handler.handle(_make_query_params())
@@ -446,3 +465,27 @@ class TestExecuteResultSerialization(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(data["results"], [])
         self.assertIn("executionMetadata", data)
+
+
+# =============================================================================
+# Access Enforcement Tests
+# =============================================================================
+
+
+class TestExecuteAccessEnforcement(unittest.IsolatedAsyncioTestCase):
+    async def test_access_denied_via_validation(self) -> None:
+        """PolicyEnforcer UnauthorizedError during validation propagates."""
+        resource = _make_resource()
+        manifest = _mock_manifest(resource=resource)
+        backend = _mock_backend()
+        registry = _mock_registry(backend)
+        enforcer = _mock_policy_enforcer()
+        enforcer.check_access.side_effect = UnauthorizedError("denied")
+        handler = ExecuteHandler(
+            manifest_index=manifest, backend_registry=registry, policy_enforcer=enforcer
+        )
+
+        with self.assertRaises(UnauthorizedError) as ctx:
+            await handler.handle(_make_query_params())
+        self.assertEqual(ctx.exception.code, -32003)
+        backend.execute.assert_not_called()

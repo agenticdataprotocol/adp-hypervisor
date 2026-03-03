@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from adp_hypervisor.handlers.base import Handler
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import InvalidParamsError
 from adp_hypervisor.protocol.types import (
     DiscoverFilter,
@@ -141,11 +142,17 @@ class DiscoverHandler(Handler):
     filters (domainPrefix, intentClass, keyword), and returns paginated results.
     """
 
-    def __init__(self, manifest_index: ManifestIndex, page_size: int = DEFAULT_PAGE_SIZE):
+    def __init__(
+        self,
+        manifest_index: ManifestIndex,
+        policy_enforcer: PolicyEnforcer,
+        page_size: int = DEFAULT_PAGE_SIZE,
+    ):
         """Initialize the handler.
 
         Args:
             manifest_index: The manifest index to read resources from.
+            policy_enforcer: The policy enforcer to filter accessible resources.
             page_size: Maximum number of resources per page.
 
         Raises:
@@ -154,6 +161,7 @@ class DiscoverHandler(Handler):
         if page_size <= 0:
             raise ValueError("page_size must be a positive integer")
         self._manifest_index = manifest_index
+        self._policy_enforcer = policy_enforcer
         self._page_size = page_size
 
     @property
@@ -173,6 +181,8 @@ class DiscoverHandler(Handler):
         request = DiscoverRequestParams.model_validate(params)
 
         all_resources = self._manifest_index.list_resources()
+        role = self._policy_enforcer.resolve_role(params)
+        all_resources = self._policy_enforcer.filter_accessible_resources(all_resources, role)
         filtered = _apply_filter(all_resources, request.filter)
 
         offset = 0

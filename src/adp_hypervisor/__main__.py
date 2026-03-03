@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
+from adp_hypervisor.policy import RoleResolver, UserRoleConfig
 from adp_hypervisor.server import ADPServer
 from adp_hypervisor.transport.stdio import StdioTransport
 
@@ -84,9 +85,8 @@ def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
         if not path.exists():
             raise FileNotFoundError(f"Manifest file not found: {path}")
 
-    # TODO: Policy enforcement is not yet implemented. The policy file is
-    # loaded by YamlManifestProvider but rules are not applied during
-    # validate/execute. For now we accept a missing policy file gracefully.
+    # Accept a missing policy file gracefully — ACCESS enforcement uses
+    # closed-by-default semantics, so an empty policy file simply denies all.
     if not policy_path.exists():
         policy_path.write_text("version: '1.0.0'\n", encoding="utf-8")
 
@@ -95,6 +95,41 @@ def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
         semantic_path=semantic_path,
         policy_path=policy_path,
     )
+
+
+def _create_role_resolver(config_dir: Path) -> RoleResolver:
+    """Create a role resolver from a config directory.
+
+    Loads the user-to-role mapping from ``users.yaml`` in the config
+    directory. If the file does not exist, returns a resolver with
+    default configuration.
+
+    Args:
+        config_dir: Path to the directory containing users.yaml.
+
+    Returns:
+        A configured RoleResolver instance.
+    """
+    users_path = config_dir / "users.yaml"
+    if not users_path.exists():
+        logger.info("No users.yaml found in %s, using default role config", config_dir)
+        return RoleResolver(UserRoleConfig())
+
+    import yaml
+
+    try:
+        raw = yaml.safe_load(users_path.read_text(encoding="utf-8"))
+        config = UserRoleConfig.model_validate(raw or {})
+    except (yaml.YAMLError, ValueError) as exc:
+        logger.error("Failed to load %s, using default role config: %s", users_path, exc)
+        return RoleResolver(UserRoleConfig())
+
+    logger.info(
+        "Loaded user-role config: %d users, default_role=%r",
+        len(config.users),
+        config.default_role,
+    )
+    return RoleResolver(config)
 
 
 def main(args: list[str] | None = None) -> None:
@@ -114,7 +149,8 @@ def main(args: list[str] | None = None) -> None:
 
     transport = StdioTransport()
     provider = _create_yaml_provider(Path(parsed.config))
-    server = ADPServer(manifest_provider=provider, transport=transport)
+    role_resolver = _create_role_resolver(Path(parsed.config))
+    server = ADPServer(manifest_provider=provider, transport=transport, role_resolver=role_resolver)
 
     logger.info(
         "Starting ADP Hypervisor: config=%s, transport=%s, log_level=%s",

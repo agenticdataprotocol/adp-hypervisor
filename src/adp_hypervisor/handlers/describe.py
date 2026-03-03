@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from adp_hypervisor.handlers.base import Handler
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import InvalidParamsError, ResourceNotFoundError
 from adp_hypervisor.protocol.types import (
     Capabilities,
@@ -157,13 +158,15 @@ class DescribeHandler(Handler):
     the resource's field types and policy rules.
     """
 
-    def __init__(self, manifest_index: ManifestIndex) -> None:
+    def __init__(self, manifest_index: ManifestIndex, policy_enforcer: PolicyEnforcer) -> None:
         """Initialize the handler.
 
         Args:
             manifest_index: The manifest index to look up resources and policies.
+            policy_enforcer: The policy enforcer to check access.
         """
         self._manifest_index = manifest_index
+        self._policy_enforcer = policy_enforcer
 
     @property
     def method(self) -> str:
@@ -185,6 +188,8 @@ class DescribeHandler(Handler):
         """
         request = DescribeRequestParams.model_validate(params)
 
+        role = self._policy_enforcer.resolve_role(params)
+
         self._validate_intent_class(request.intent_class)
 
         resource = self._manifest_index.get_resource(request.resource_id, version=request.version)
@@ -197,6 +202,8 @@ class DescribeHandler(Handler):
         self._validate_resource_supports_intent(
             request.resource_id, request.intent_class, resource.intent_classes
         )
+
+        self._policy_enforcer.check_access(request.resource_id, role, request.intent_class)
 
         fields = self._extract_fields(resource)
         capabilities = self._build_capabilities(fields, request.intent_class, request.resource_id)

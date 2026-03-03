@@ -13,6 +13,7 @@ from adp_hypervisor.handlers.discover import (
 )
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import InvalidParamsError
 
 
@@ -83,6 +84,13 @@ def _mock_manifest(resources: list[CuratedResource] | None = None) -> ManifestIn
     return index
 
 
+def _mock_policy_enforcer() -> PolicyEnforcer:
+    enforcer = MagicMock(spec=PolicyEnforcer)
+    enforcer.resolve_role.return_value = "default"
+    enforcer.filter_accessible_resources.side_effect = lambda resources, role: resources
+    return enforcer
+
+
 def _make_params(
     domain_prefix: str | None = None,
     intent_class: str | None = None,
@@ -137,7 +145,9 @@ class TestCursorEncoding(unittest.TestCase):
 
 class TestDiscoverHandlerMethod(unittest.TestCase):
     def test_method_name(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         self.assertEqual(handler.method, "adp.discover")
 
 
@@ -148,28 +158,36 @@ class TestDiscoverHandlerMethod(unittest.TestCase):
 
 class TestDiscoverHandlerNoFilters(unittest.IsolatedAsyncioTestCase):
     async def test_returns_all_resources(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(len(data["resources"]), 5)
 
     async def test_empty_manifest_returns_empty(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=[]))
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=[]), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["resources"], [])
 
     async def test_empty_params(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle({})
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(len(data["resources"]), 5)
 
     async def test_resource_excludes_curation_fields(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -181,7 +199,10 @@ class TestDiscoverHandlerNoFilters(unittest.IsolatedAsyncioTestCase):
         resources = [
             _make_resource("test:wildcard", intent_classes=["*"]),
         ]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources))
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -194,7 +215,10 @@ class TestDiscoverHandlerNoFilters(unittest.IsolatedAsyncioTestCase):
         resources = [
             _make_resource("test:specific", intent_classes=["QUERY", "LOOKUP"]),
         ]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources))
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -208,7 +232,9 @@ class TestDiscoverHandlerNoFilters(unittest.IsolatedAsyncioTestCase):
 
 class TestDiscoverHandlerDomainPrefixFilter(unittest.IsolatedAsyncioTestCase):
     async def test_exact_match(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(domain_prefix="com.acme.finance:bank_failures"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -216,7 +242,9 @@ class TestDiscoverHandlerDomainPrefixFilter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["resources"][0]["resourceId"], "com.acme.finance:bank_failures")
 
     async def test_glob_wildcard(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(domain_prefix="com.acme.finance:*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -225,14 +253,18 @@ class TestDiscoverHandlerDomainPrefixFilter(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(r["resourceId"].startswith("com.acme.finance:"))
 
     async def test_case_insensitive(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(domain_prefix="COM.ACME.FINANCE:*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(len(data["resources"]), 4)
 
     async def test_no_match(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(domain_prefix="com.other:*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -246,7 +278,9 @@ class TestDiscoverHandlerDomainPrefixFilter(unittest.IsolatedAsyncioTestCase):
 
 class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
     async def test_filter_by_query(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -257,7 +291,9 @@ class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:universal_resource", resource_ids)
 
     async def test_filter_by_lookup(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(intent_class="LOOKUP"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -267,7 +303,9 @@ class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:universal_resource", resource_ids)
 
     async def test_wildcard_returns_all(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(intent_class="*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -276,7 +314,10 @@ class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
     async def test_resource_without_intent_classes_not_matched(self) -> None:
         # A resource with an empty intentClasses array should not match any intent filter.
         resources = [_make_resource(resource_id="test:no_intents", intent_classes=[])]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources))
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -290,7 +331,9 @@ class TestDiscoverHandlerIntentClassFilter(unittest.IsolatedAsyncioTestCase):
 
 class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
     async def test_match_description(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="*bank failure*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -298,7 +341,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:bank_failures", resource_ids)
 
     async def test_match_resource_id(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="*employees*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -306,7 +351,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["resources"][0]["resourceId"], "org.example.hr:employees")
 
     async def test_match_semantic_description(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="*historical*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -314,7 +361,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:bank_failures", resource_ids)
 
     async def test_match_tag(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="AUDIT"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -322,7 +371,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:audit_events", resource_ids)
 
     async def test_case_insensitive(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="*BANK FAILURE*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -330,7 +381,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:bank_failures", resource_ids)
 
     async def test_no_match(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(_make_params(keyword="*nonexistent*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -344,7 +397,9 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
 
 class TestDiscoverHandlerCombinedFilters(unittest.IsolatedAsyncioTestCase):
     async def test_domain_prefix_and_intent_class(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(
             _make_params(domain_prefix="com.acme.finance:*", intent_class="QUERY")
         )
@@ -355,7 +410,9 @@ class TestDiscoverHandlerCombinedFilters(unittest.IsolatedAsyncioTestCase):
         self.assertIn("com.acme.finance:bank_failures", resource_ids)
 
     async def test_all_filters(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(
             _make_params(
                 domain_prefix="com.acme.finance:*",
@@ -369,7 +426,9 @@ class TestDiscoverHandlerCombinedFilters(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["resources"][0]["resourceId"], "com.acme.finance:failure_vectors")
 
     async def test_mutually_exclusive_filters_return_empty(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         result = await handler.handle(
             _make_params(domain_prefix="org.example.hr:*", keyword="*finance*")
         )
@@ -386,7 +445,11 @@ class TestDiscoverHandlerCombinedFilters(unittest.IsolatedAsyncioTestCase):
 class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
     async def test_no_cursor_returns_first_page(self) -> None:
         resources = [_make_resource(f"test:r{i}") for i in range(5)]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=2)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=2,
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -397,7 +460,11 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
 
     async def test_cursor_returns_next_page(self) -> None:
         resources = [_make_resource(f"test:r{i}") for i in range(5)]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=2)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=2,
+        )
 
         # Get first page to get cursor
         first_result = await handler.handle(_make_params())
@@ -413,7 +480,11 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
 
     async def test_last_page_no_next_cursor(self) -> None:
         resources = [_make_resource(f"test:r{i}") for i in range(3)]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=2)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=2,
+        )
 
         # Get first page cursor
         first_result = await handler.handle(_make_params())
@@ -428,7 +499,11 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
 
     async def test_exact_page_boundary(self) -> None:
         resources = [_make_resource(f"test:r{i}") for i in range(4)]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=2)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=2,
+        )
 
         # Get first page
         first_result = await handler.handle(_make_params())
@@ -443,7 +518,11 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_fit_in_one_page(self) -> None:
         resources = [_make_resource(f"test:r{i}") for i in range(3)]
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=5)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=5,
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -451,12 +530,16 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("nextCursor", data)
 
     async def test_invalid_cursor_raises(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         with self.assertRaisesRegex(InvalidParamsError, "Invalid cursor"):
             await handler.handle(_make_params(cursor="garbage!!!"))
 
     async def test_default_page_size(self) -> None:
-        handler = DiscoverHandler(manifest_index=_mock_manifest())
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         self.assertEqual(handler._page_size, DEFAULT_PAGE_SIZE)
 
     async def test_pagination_with_filter(self) -> None:
@@ -464,7 +547,11 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
             _make_resource(f"com.acme:r{i}", intent_classes=["QUERY"]) for i in range(5)
         ] + [_make_resource(f"org.other:r{i}", intent_classes=["LOOKUP"]) for i in range(3)]
 
-        handler = DiscoverHandler(manifest_index=_mock_manifest(resources=resources), page_size=2)
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(resources=resources),
+            policy_enforcer=_mock_policy_enforcer(),
+            page_size=2,
+        )
         result = await handler.handle(_make_params(domain_prefix="com.acme:*"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -485,3 +572,36 @@ class TestDiscoverHandlerPagination(unittest.IsolatedAsyncioTestCase):
         data3 = result3.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(len(data3["resources"]), 1)
         self.assertNotIn("nextCursor", data3)
+
+
+# =============================================================================
+# Access Filtering Tests
+# =============================================================================
+
+
+class TestDiscoverAccessFiltering(unittest.IsolatedAsyncioTestCase):
+    async def test_filters_resources_by_access(self) -> None:
+        """When filter_accessible_resources returns a subset, only that subset appears."""
+        enforcer = _mock_policy_enforcer()
+        subset = [_SAMPLE_RESOURCES[0], _SAMPLE_RESOURCES[4]]
+        enforcer.filter_accessible_resources.side_effect = lambda resources, role: subset
+        handler = DiscoverHandler(manifest_index=_mock_manifest(), policy_enforcer=enforcer)
+
+        result = await handler.handle(_make_params())
+        data = result.model_dump(by_alias=True, exclude_none=True)
+
+        resource_ids = [r["resourceId"] for r in data["resources"]]
+        self.assertEqual(len(resource_ids), 2)
+        self.assertIn("com.acme.finance:bank_failures", resource_ids)
+        self.assertIn("org.example.hr:employees", resource_ids)
+
+    async def test_no_accessible_resources(self) -> None:
+        """When filter_accessible_resources returns empty, result has empty resources."""
+        enforcer = _mock_policy_enforcer()
+        enforcer.filter_accessible_resources.side_effect = lambda resources, role: []
+        handler = DiscoverHandler(manifest_index=_mock_manifest(), policy_enforcer=enforcer)
+
+        result = await handler.handle(_make_params())
+        data = result.model_dump(by_alias=True, exclude_none=True)
+
+        self.assertEqual(data["resources"], [])
