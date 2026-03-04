@@ -11,9 +11,11 @@ import logging
 
 from adp_hypervisor.protocol.types import (
     Predicate,
+    PredicateExpression,
     PredicateGroup,
     PredicateOperator,
     SimilarValue,
+    normalize_to_predicate_group,
 )
 from backends.base import Backend
 
@@ -36,15 +38,16 @@ class VectorBackend(Backend):
 
     @staticmethod
     def _extract_similar(
-        group: PredicateGroup,
+        expr: PredicateExpression,
     ) -> tuple[list[Predicate], PredicateGroup]:
-        """Extract all SIMILAR predicates from a predicate group.
+        """Extract all SIMILAR predicates from a predicate expression.
 
         Returns a tuple of ``(similar_predicates, remaining_group)`` where
         ``remaining_group`` contains all predicates except the extracted ones.
 
         Only top-level predicates are checked; nested groups are left intact.
         """
+        group = normalize_to_predicate_group(expr)
         similar_preds: list[Predicate] = []
         remaining: list[PredicateGroup | Predicate] = []
         for pred in group.predicates:

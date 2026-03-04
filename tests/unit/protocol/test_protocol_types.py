@@ -78,6 +78,7 @@ from adp_hypervisor.protocol import (
     ValidationIssue,
     ValidationIssueCode,
     error_from_code,
+    normalize_to_predicate_group,
 )
 
 
@@ -874,3 +875,64 @@ class TestModelSerialization(unittest.TestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["resources"][0]["resourceId"], "com.acme:users")
         self.assertEqual(data["nextCursor"], "page2")
+
+
+# =============================================================================
+# PredicateExpression / normalize_to_predicate_group Tests
+# =============================================================================
+
+
+class TestPredicateExpression(unittest.TestCase):
+    """Tests for PredicateExpression type and normalize_to_predicate_group."""
+
+    def test_query_intent_accepts_bare_predicate(self) -> None:
+        intent = QueryIntent.model_validate(
+            {
+                "intentClass": "QUERY",
+                "resourceId": "com.acme:test",
+                "predicates": {"fieldId": "name", "op": "EQ", "value": "Alice"},
+            }
+        )
+        self.assertIsInstance(intent.predicates, Predicate)
+
+    def test_query_intent_accepts_predicate_group(self) -> None:
+        intent = QueryIntent.model_validate(
+            {
+                "intentClass": "QUERY",
+                "resourceId": "com.acme:test",
+                "predicates": {
+                    "op": "AND",
+                    "predicates": [{"fieldId": "name", "op": "EQ", "value": "Alice"}],
+                },
+            }
+        )
+        self.assertIsInstance(intent.predicates, PredicateGroup)
+
+    def test_revise_intent_accepts_bare_predicate(self) -> None:
+        intent = ReviseIntent.model_validate(
+            {
+                "intentClass": "REVISE",
+                "resourceId": "com.acme:test",
+                "predicates": {"fieldId": "id", "op": "EQ", "value": "123"},
+                "payload": {"name": "updated"},
+            }
+        )
+        self.assertIsInstance(intent.predicates, Predicate)
+
+    def test_normalize_bare_predicate(self) -> None:
+        pred = Predicate(field_id="a", op=PredicateOperator.EQ, value="1")
+        group = normalize_to_predicate_group(pred)
+        self.assertIsInstance(group, PredicateGroup)
+        self.assertEqual(group.op, LogicOperator.AND)
+        self.assertEqual(len(group.predicates), 1)
+        self.assertEqual(group.predicates[0], pred)
+
+    def test_normalize_predicate_group_passthrough(self) -> None:
+        group = PredicateGroup(
+            op=LogicOperator.OR,
+            predicates=[
+                Predicate(field_id="a", op=PredicateOperator.EQ, value="1"),
+            ],
+        )
+        result = normalize_to_predicate_group(group)
+        self.assertIs(result, group)

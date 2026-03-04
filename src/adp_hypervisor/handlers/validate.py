@@ -24,6 +24,7 @@ from adp_hypervisor.protocol.types import (
     LogicOperator,
     LookupIntent,
     Predicate,
+    PredicateExpression,
     PredicateGroup,
     PredicateOperator,
     QueryIntent,
@@ -92,10 +93,12 @@ def _get_operators_for_field(field_type: FieldType) -> list[PredicateOperator]:
 # =============================================================================
 
 
-def _collect_predicates(group: PredicateGroup) -> list[Predicate]:
-    """Recursively collect all leaf Predicate instances from a PredicateGroup."""
+def _collect_predicates(expr: PredicateExpression) -> list[Predicate]:
+    """Recursively collect all leaf Predicate instances from a PredicateExpression."""
+    if isinstance(expr, Predicate):
+        return [expr]
     result: list[Predicate] = []
-    for item in group.predicates:
+    for item in expr.predicates:
         if isinstance(item, PredicateGroup):
             result.extend(_collect_predicates(item))
         else:
@@ -217,7 +220,8 @@ class ValidateHandler(Handler):
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a QUERY intent."""
-        self._validate_predicate_group(intent.predicates, issues)
+        if isinstance(intent.predicates, PredicateGroup):
+            self._validate_predicate_group(intent.predicates, issues)
 
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
@@ -253,7 +257,8 @@ class ValidateHandler(Handler):
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a REVISE intent."""
-        self._validate_predicate_group(intent.predicates, issues)
+        if isinstance(intent.predicates, PredicateGroup):
+            self._validate_predicate_group(intent.predicates, issues)
 
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
@@ -340,16 +345,16 @@ class ValidateHandler(Handler):
                     )
                 )
         else:
-            if len(group.predicates) < 2:
+            if len(group.predicates) < 1:
                 issues.append(
                     ValidationIssue(
                         code=ValidationIssueCode.INVALID_FORMAT,
                         severity=IssueSeverity.BLOCKING,
                         message=(
-                            f"{group.op.value} operator requires at least 2 operands, "
+                            f"{group.op.value} operator requires at least 1 operand, "
                             f"got {len(group.predicates)}"
                         ),
-                        correction_hint=(f"Provide at least 2 predicates for {group.op.value}."),
+                        correction_hint=(f"Provide at least 1 predicate for {group.op.value}."),
                     )
                 )
 

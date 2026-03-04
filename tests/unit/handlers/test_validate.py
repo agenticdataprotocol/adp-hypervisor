@@ -668,7 +668,7 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
 class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
     """Validate that PredicateGroup logic operators have correct arity.
 
-    AND/OR require >= 2 operands; NOT requires exactly 1.
+    AND/OR require >= 1 operand; NOT requires exactly 1.
     """
 
     async def test_and_with_two_predicates_valid(self) -> None:
@@ -691,7 +691,7 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(data["valid"])
         self.assertNotIn("issues", data)
 
-    async def test_and_with_single_predicate_invalid(self) -> None:
+    async def test_and_with_single_predicate_valid(self) -> None:
         resource = _make_resource()
         handler = ValidateHandler(
             manifest_index=_mock_manifest(resource=resource),
@@ -705,10 +705,8 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
-        self.assertEqual(len(fmt_issues), 1)
-        self.assertIn("AND", fmt_issues[0]["message"])
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
 
     async def test_or_with_two_predicates_valid(self) -> None:
         resource = _make_resource()
@@ -729,7 +727,7 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertTrue(data["valid"])
 
-    async def test_or_with_single_predicate_invalid(self) -> None:
+    async def test_or_with_single_predicate_valid(self) -> None:
         resource = _make_resource()
         handler = ValidateHandler(
             manifest_index=_mock_manifest(resource=resource),
@@ -743,10 +741,8 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
-        self.assertEqual(len(fmt_issues), 1)
-        self.assertIn("OR", fmt_issues[0]["message"])
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
 
     async def test_not_with_single_predicate_valid(self) -> None:
         resource = _make_resource()
@@ -864,10 +860,8 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
-        self.assertEqual(len(fmt_issues), 1)
-        self.assertIn("AND", fmt_issues[0]["message"])
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
 
 
 # =============================================================================
@@ -901,3 +895,108 @@ class TestValidateAccessEnforcement(unittest.IsolatedAsyncioTestCase):
         await handler.handle(params)
 
         enforcer.resolve_role.assert_called_once_with(params)
+
+
+# =============================================================================
+# PredicateExpression Tests (bare Predicate as predicates)
+# =============================================================================
+
+
+def _make_query_params_bare_predicate(
+    resource_id: str = "com.acme:test_resource",
+    field_id: str = "name",
+    op: str = "EQ",
+    value: Any = "test",
+    projections: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build QUERY params using a bare Predicate (not a PredicateGroup)."""
+    intent: dict[str, Any] = {
+        "intentClass": "QUERY",
+        "resourceId": resource_id,
+        "predicates": {"fieldId": field_id, "op": op, "value": value},
+    }
+    if projections is not None:
+        intent["projections"] = projections
+    return {"intent": intent}
+
+
+def _make_revise_params_bare_predicate(
+    resource_id: str = "com.acme:test_resource",
+    field_id: str = "id",
+    op: str = "EQ",
+    value: Any = "123",
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build REVISE params using a bare Predicate (not a PredicateGroup)."""
+    if payload is None:
+        payload = {"name": "updated"}
+    return {
+        "intent": {
+            "intentClass": "REVISE",
+            "resourceId": resource_id,
+            "predicates": {"fieldId": field_id, "op": op, "value": value},
+            "payload": payload,
+        },
+    }
+
+
+class TestPredicateExpression(unittest.IsolatedAsyncioTestCase):
+    """Tests for bare Predicate (PredicateExpression) as intent predicates."""
+
+    async def test_query_with_bare_predicate_valid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(_make_query_params_bare_predicate())
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
+
+    async def test_query_with_bare_predicate_unknown_field(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(_make_query_params_bare_predicate(field_id="nonexistent"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        self.assertEqual(data["issues"][0]["code"], "FIELD_NOT_FOUND")
+
+    async def test_revise_with_bare_predicate_valid(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(_make_revise_params_bare_predicate())
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
+
+    async def test_revise_with_bare_predicate_unknown_field(self) -> None:
+        resource = _make_resource()
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(_make_revise_params_bare_predicate(field_id="nonexistent"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        self.assertEqual(data["issues"][0]["code"], "FIELD_NOT_FOUND")
+
+
+class TestCollectPredicatesWithBarePredicate(unittest.TestCase):
+    """Tests for _collect_predicates with bare Predicate input."""
+
+    def test_bare_predicate(self) -> None:
+        pred = Predicate(field_id="a", op=PredicateOperator.EQ, value="1")
+        result = _collect_predicates(pred)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].field_id, "a")
