@@ -38,7 +38,7 @@ version: "1.0.0"
 #   # The following metadata fields are provided automatically by convention -
 #   # do NOT define them in the fields list:
 #   #
-#   #   name           (STRING)    - File or directory name
+#   #   path           (STRING)    - Relative path from the source root
 #   #   size           (INTEGER)   - Size in bytes (0 for directories)
 #   #   last_modified  (TIMESTAMP) - Last modification time
 #   #   created_at     (TIMESTAMP) - Creation time
@@ -50,9 +50,11 @@ version: "1.0.0"
 #   #   content_encoding  (STRING) - "utf-8" or "base64"
 #   #
 #   # Intent semantics for local filesystem resources:
-#   #   LOOKUP  - Read a specific file by name
-#   #   QUERY   - List files in the directory (metadata only, no content)
-#   #   INGEST  - Create a new file or subdirectory
+#   #   LOOKUP  - Read a specific file by path
+#   #   QUERY   - List entries in a directory (metadata only, no content).
+#   #             Use a "path EQ <dir>" predicate to list a subdirectory;
+#   #             omit it to list the source root.
+#   #   INGEST  - Create a new file or subdirectory (path may contain "/")
 #   #   REVISE  - Overwrite an existing file's content
 #   #
 #   - resourceId: "com.example:reports"

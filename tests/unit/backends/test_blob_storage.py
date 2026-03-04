@@ -128,7 +128,7 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
             intent = LookupIntent(
                 intent_class="LOOKUP",
                 resource_id=_RID,
-                key=IdentityPredicate(field_id="name", op="EQ", value="hello.txt"),
+                key=IdentityPredicate(field_id="path", op="EQ", value="hello.txt"),
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -136,7 +136,7 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(result.rows), 1)
             row = result.rows[0]
-            self.assertEqual(row["name"], "hello.txt")
+            self.assertEqual(row["path"], "hello.txt")
             self.assertEqual(row["content"], "hello world")
             self.assertEqual(row["content_encoding"], "utf-8")
             self.assertFalse(row["is_directory"])
@@ -156,7 +156,7 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
             intent = LookupIntent(
                 intent_class="LOOKUP",
                 resource_id=_RID,
-                key=IdentityPredicate(field_id="name", op="EQ", value="test.png"),
+                key=IdentityPredicate(field_id="path", op="EQ", value="test.png"),
             )
             mock_index = _mock_manifest_index("images")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -178,7 +178,7 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
             intent = LookupIntent(
                 intent_class="LOOKUP",
                 resource_id=_RID,
-                key=IdentityPredicate(field_id="name", op="EQ", value="missing.txt"),
+                key=IdentityPredicate(field_id="path", op="EQ", value="missing.txt"),
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -197,15 +197,15 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
             intent = LookupIntent(
                 intent_class="LOOKUP",
                 resource_id=_RID,
-                key=IdentityPredicate(field_id="name", op="EQ", value="test.txt"),
-                projections=["name", "content"],
+                key=IdentityPredicate(field_id="path", op="EQ", value="test.txt"),
+                projections=["path", "content"],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
             row = result.rows[0]
-            self.assertIn("name", row)
+            self.assertIn("path", row)
             self.assertIn("content", row)
             self.assertNotIn("size", row)
 
@@ -224,7 +224,7 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
-                with self.assertRaises(RuntimeError, msg="field_id must be 'name'"):
+                with self.assertRaises(RuntimeError, msg="field_id must be 'path'"):
                     await backend.execute(intent)
 
 
@@ -255,7 +255,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 result = await backend.execute(intent)
 
             self.assertEqual(len(result.rows), 3)
-            names = {r["name"] for r in result.rows}
+            names = {r["path"] for r in result.rows}
             self.assertEqual(names, {"a.txt", "b.txt", "subdir"})
             # Content should not be in QUERY results
             for row in result.rows:
@@ -298,7 +298,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 resource_id=_RID,
                 predicates=PredicateGroup(
                     predicates=[
-                        Predicate(field_id="name", op=PredicateOperator.EQ, value="match.txt")
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="match.txt")
                     ],
                     op=LogicOperator.AND,
                 ),
@@ -308,7 +308,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 result = await backend.execute(intent)
 
             self.assertEqual(len(result.rows), 1)
-            self.assertEqual(result.rows[0]["name"], "match.txt")
+            self.assertEqual(result.rows[0]["path"], "match.txt")
 
     async def test_query_with_is_directory_predicate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -335,7 +335,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 result = await backend.execute(intent)
 
             self.assertEqual(len(result.rows), 1)
-            self.assertEqual(result.rows[0]["name"], "file.txt")
+            self.assertEqual(result.rows[0]["path"], "file.txt")
 
     async def test_query_with_ignore_patterns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -356,7 +356,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
-            names = {r["name"] for r in result.rows}
+            names = {r["path"] for r in result.rows}
             self.assertIn("keep.txt", names)
             self.assertNotIn("ignore.tmp", names)
 
@@ -373,18 +373,18 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 intent_class="QUERY",
                 resource_id=_RID,
                 predicates=PredicateGroup(predicates=[], op=LogicOperator.AND),
-                projections=["name", "size"],
+                projections=["path", "size"],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
             row = result.rows[0]
-            self.assertIn("name", row)
+            self.assertIn("path", row)
             self.assertIn("size", row)
             self.assertNotIn("last_modified", row)
 
-    async def test_query_with_or_predicate(self) -> None:
+    async def test_query_with_in_predicate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source_dir = Path(tmpdir) / "data"
             source_dir.mkdir()
@@ -400,17 +400,20 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 resource_id=_RID,
                 predicates=PredicateGroup(
                     predicates=[
-                        Predicate(field_id="name", op=PredicateOperator.EQ, value="a.txt"),
-                        Predicate(field_id="name", op=PredicateOperator.EQ, value="b.txt"),
+                        Predicate(
+                            field_id="path",
+                            op=PredicateOperator.IN,
+                            value=["a.txt", "b.txt"],
+                        ),
                     ],
-                    op=LogicOperator.OR,
+                    op=LogicOperator.AND,
                 ),
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
-            names = {r["name"] for r in result.rows}
+            names = {r["path"] for r in result.rows}
             self.assertEqual(names, {"a.txt", "b.txt"})
 
     async def test_query_with_nested_predicate_group(self) -> None:
@@ -433,8 +436,8 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                         Predicate(field_id="is_directory", op=PredicateOperator.EQ, value=False),
                         PredicateGroup(
                             predicates=[
-                                Predicate(field_id="name", op=PredicateOperator.EQ, value="a.txt"),
-                                Predicate(field_id="name", op=PredicateOperator.EQ, value="b.log"),
+                                Predicate(field_id="path", op=PredicateOperator.EQ, value="a.txt"),
+                                Predicate(field_id="path", op=PredicateOperator.EQ, value="b.log"),
                             ],
                             op=LogicOperator.OR,
                         ),
@@ -446,7 +449,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
-            names = {r["name"] for r in result.rows}
+            names = {r["path"] for r in result.rows}
             self.assertEqual(names, {"a.txt", "b.log"})
 
     async def test_query_unsupported_operator_raises(self) -> None:
@@ -463,7 +466,7 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 resource_id=_RID,
                 predicates=PredicateGroup(
                     predicates=[
-                        Predicate(field_id="name", op=PredicateOperator.SIMILAR, value="file"),
+                        Predicate(field_id="path", op=PredicateOperator.SIMILAR, value="file"),
                     ],
                     op=LogicOperator.AND,
                 ),
@@ -490,14 +493,14 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
                 intent_class="QUERY",
                 resource_id=_RID,
                 predicates=PredicateGroup(predicates=[], op=LogicOperator.AND),
-                projections=["name"],
+                projections=["path"],
                 order_by=[SortOrder(field_id="size", direction="DESC")],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 result = await backend.execute(intent)
 
-            self.assertEqual(result.rows[0]["name"], "large.txt")
+            self.assertEqual(result.rows[0]["path"], "large.txt")
             self.assertNotIn("size", result.rows[0])
 
 
@@ -518,7 +521,7 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
             intent = IngestIntent(
                 intent_class="INGEST",
                 resource_id=_RID,
-                payload=[{"name": "new.txt", "content": "hello"}],
+                payload=[{"path": "new.txt", "content": "hello"}],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -540,7 +543,7 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
             intent = IngestIntent(
                 intent_class="INGEST",
                 resource_id=_RID,
-                payload=[{"name": "subdir", "is_directory": True}],
+                payload=[{"path": "subdir", "is_directory": True}],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -563,7 +566,7 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
             intent = IngestIntent(
                 intent_class="INGEST",
                 resource_id=_RID,
-                payload=[{"name": "img.png", "content": encoded, "content_encoding": "base64"}],
+                payload=[{"path": "img.png", "content": encoded, "content_encoding": "base64"}],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -584,7 +587,7 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
             intent = IngestIntent(
                 intent_class="INGEST",
                 resource_id=_RID,
-                payload=[{"name": "existing.txt", "content": "new"}],
+                payload=[{"path": "existing.txt", "content": "new"}],
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -603,8 +606,8 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
                 intent_class="INGEST",
                 resource_id=_RID,
                 payload=[
-                    {"name": "a.txt", "content": "aaa"},
-                    {"name": "b.txt", "content": "bbb"},
+                    {"path": "a.txt", "content": "aaa"},
+                    {"path": "b.txt", "content": "bbb"},
                 ],
             )
             mock_index = _mock_manifest_index("data")
@@ -636,7 +639,7 @@ class TestLocalFSBackendRevise(unittest.IsolatedAsyncioTestCase):
                 resource_id=_RID,
                 predicates=PredicateGroup(
                     predicates=[
-                        Predicate(field_id="name", op=PredicateOperator.EQ, value="target.txt")
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="target.txt")
                     ],
                     op=LogicOperator.AND,
                 ),
@@ -662,7 +665,7 @@ class TestLocalFSBackendRevise(unittest.IsolatedAsyncioTestCase):
                 resource_id=_RID,
                 predicates=PredicateGroup(
                     predicates=[
-                        Predicate(field_id="name", op=PredicateOperator.EQ, value="missing.txt")
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="missing.txt")
                     ],
                     op=LogicOperator.AND,
                 ),
@@ -689,7 +692,7 @@ class TestLocalFSBackendRevise(unittest.IsolatedAsyncioTestCase):
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
-                with self.assertRaises(RuntimeError, msg="field_id='name'"):
+                with self.assertRaises(RuntimeError, msg="field_id='path'"):
                     await backend.execute(intent)
 
 
@@ -764,7 +767,7 @@ class TestLocalFSBackendSecurity(unittest.IsolatedAsyncioTestCase):
             intent = LookupIntent(
                 intent_class="LOOKUP",
                 resource_id=_RID,
-                key=IdentityPredicate(field_id="name", op="EQ", value="../etc/passwd"),
+                key=IdentityPredicate(field_id="path", op="EQ", value="../etc/passwd"),
             )
             mock_index = _mock_manifest_index("data")
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
@@ -780,3 +783,239 @@ class TestLocalFSBackendSecurity(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(RuntimeError, msg="not connected"):
             await backend.execute(intent)
+
+
+# =============================================================================
+# TestLocalFSBackendSubdirectory
+# =============================================================================
+
+
+class TestLocalFSBackendSubdirectory(unittest.IsolatedAsyncioTestCase):
+    """Tests for subdirectory operations via the ``path`` field."""
+
+    async def test_query_subdir_lists_children(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            sub = source_dir / "reports"
+            sub.mkdir()
+            (sub / "jan.csv").write_text("jan")
+            (sub / "feb.csv").write_text("feb")
+            (source_dir / "root.txt").write_text("root")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="reports")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"reports/feb.csv", "reports/jan.csv"})
+
+    async def test_query_path_eq_file_returns_single(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            sub = source_dir / "reports"
+            sub.mkdir()
+            (sub / "jan.csv").write_text("jan-data")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(
+                            field_id="path",
+                            op=PredicateOperator.EQ,
+                            value="reports/jan.csv",
+                        )
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 1)
+            self.assertEqual(result.rows[0]["path"], "reports/jan.csv")
+
+    async def test_query_path_eq_nonexistent_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(
+                            field_id="path",
+                            op=PredicateOperator.EQ,
+                            value="no_such_dir",
+                        )
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="Path not found"):
+                    await backend.execute(intent)
+
+    async def test_query_multiple_path_predicates_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="a"),
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="b"),
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="one 'path' predicate"):
+                    await backend.execute(intent)
+
+    async def test_lookup_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            sub = source_dir / "2024"
+            sub.mkdir()
+            (sub / "report.txt").write_text("content")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="2024/report.txt"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 1)
+            self.assertEqual(result.rows[0]["path"], "2024/report.txt")
+            self.assertEqual(result.rows[0]["content"], "content")
+
+    async def test_ingest_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = IngestIntent(
+                intent_class="INGEST",
+                resource_id=_RID,
+                payload=[{"path": "2024/new.txt", "content": "hello"}],
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(result.metadata["status"], "SUCCESS")
+            self.assertTrue((source_dir / "2024" / "new.txt").exists())
+            self.assertEqual((source_dir / "2024" / "new.txt").read_text(), "hello")
+
+    async def test_revise_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            sub = source_dir / "docs"
+            sub.mkdir()
+            (sub / "readme.md").write_text("old")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = ReviseIntent(
+                intent_class="REVISE",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(
+                            field_id="path",
+                            op=PredicateOperator.EQ,
+                            value="docs/readme.md",
+                        )
+                    ],
+                    op=LogicOperator.AND,
+                ),
+                payload={"content": "new"},
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(result.metadata["status"], "SUCCESS")
+            self.assertEqual((sub / "readme.md").read_text(), "new")
+
+    async def test_path_traversal_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="sub/../../../etc/passwd"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="traversal"):
+                    await backend.execute(intent)
+
+    async def test_absolute_path_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = IngestIntent(
+                intent_class="INGEST",
+                resource_id=_RID,
+                payload=[{"path": "/etc/passwd", "content": "bad"}],
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="Absolute paths"):
+                    await backend.execute(intent)

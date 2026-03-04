@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Convention-based metadata fields for local filesystem entries.
 METADATA_FIELD_IDS = frozenset(
-    {"name", "size", "last_modified", "created_at", "content_type", "is_directory"}
+    {"path", "size", "last_modified", "created_at", "content_type", "is_directory"}
 )
 
 
@@ -137,7 +137,7 @@ class LocalFSBackend(BlobStorageBackend):
     # -------------------------------------------------------------------------
 
     def _execute_lookup(self, source_dir: Path, intent: LookupIntent) -> BackendResult:
-        """Execute LOOKUP intent — read a specific file by name.
+        """Execute LOOKUP intent — read a specific file by path.
 
         Args:
             source_dir: The resolved source directory.
@@ -149,19 +149,19 @@ class LocalFSBackend(BlobStorageBackend):
         Raises:
             RuntimeError: If file not found or path is invalid.
         """
-        if intent.key.field_id != "name":
-            raise RuntimeError(f"LOOKUP key field_id must be 'name', got {intent.key.field_id!r}")
+        if intent.key.field_id != "path":
+            raise RuntimeError(f"LOOKUP key field_id must be 'path', got {intent.key.field_id!r}")
 
-        file_name = str(intent.key.value)
-        target = self._resolve_child(source_dir, file_name)
+        file_path = str(intent.key.value)
+        target = self._resolve_child(source_dir, file_path)
 
         if not target.exists():
-            raise RuntimeError(f"File not found: {file_name!r}")
+            raise RuntimeError(f"File not found: {file_path!r}")
 
         if not target.is_file():
-            raise RuntimeError(f"Path is not a file: {file_name!r}")
+            raise RuntimeError(f"Path is not a file: {file_path!r}")
 
-        row = self._build_entry_metadata(target)
+        row = self._build_entry_metadata(target, source_dir)
 
         # TODO: add configurable max file size limit for content retrieval to
         # prevent OOM on very large files.
@@ -180,7 +180,10 @@ class LocalFSBackend(BlobStorageBackend):
         return BackendResult(rows=[row])
 
     def _execute_query(self, source_dir: Path, intent: QueryIntent) -> BackendResult:
-        """Execute QUERY intent — list files in the directory.
+        """Execute QUERY intent — list entries in a directory.
+
+        Supports directory selection via a ``path EQ <dir>`` predicate.
+        At most one ``path`` predicate is allowed per query.
 
         Args:
             source_dir: The resolved source directory.
@@ -189,20 +192,43 @@ class LocalFSBackend(BlobStorageBackend):
         Returns:
             Result containing metadata rows (no file content).
         """
+        listing_dir = source_dir
+
+        path_value, filter_predicates = self._pop_path_eq_predicate(intent.predicates)
+
+        if path_value is not None:
+            target = self._resolve_child(source_dir, path_value)
+            if target.is_dir():
+                listing_dir = target
+            elif target.is_file():
+                entry = self._build_entry_metadata(target, source_dir)
+                if self._matches_predicates(entry, filter_predicates):
+                    file_rows: list[dict[str, Any]] = [entry]
+                else:
+                    file_rows = []
+                if intent.projections:
+                    file_rows = [
+                        {k: v for k, v in row.items() if k in intent.projections}
+                        for row in file_rows
+                    ]
+                return BackendResult(rows=file_rows)
+            else:
+                raise RuntimeError(f"Path not found: {path_value!r}")
+
         rows: list[dict[str, Any]] = []
 
         # TODO: for very large directories, consider lazy iteration with
         # os.scandir and early limit cutoff to reduce memory usage.
-        for child in sorted(source_dir.iterdir(), key=lambda p: p.name):
+        for child in sorted(listing_dir.iterdir(), key=lambda p: p.name):
             if not self._config.allow_symlinks and child.is_symlink():
                 continue
 
             if self._should_ignore(child):
                 continue
 
-            entry = self._build_entry_metadata(child)
+            entry = self._build_entry_metadata(child, source_dir)
 
-            if not self._matches_predicates(entry, intent.predicates):
+            if not self._matches_predicates(entry, filter_predicates):
                 continue
 
             rows.append(entry)
@@ -226,7 +252,7 @@ class LocalFSBackend(BlobStorageBackend):
 
         Args:
             source_dir: The resolved source directory.
-            intent: The INGEST intent with payload containing name and content.
+            intent: The INGEST intent with payload containing path and content.
 
         Returns:
             Result with status metadata.
@@ -242,18 +268,18 @@ class LocalFSBackend(BlobStorageBackend):
             if not isinstance(item, dict):
                 raise RuntimeError("Each payload item must be a dict")
 
-            name = item.get("name")
-            if not name or not isinstance(name, str):
-                raise RuntimeError("Each payload item must have a 'name' field (string)")
+            path_value = item.get("path")
+            if not path_value or not isinstance(path_value, str):
+                raise RuntimeError("Each payload item must have a 'path' field (string)")
 
-            target = self._resolve_child(source_dir, name)
+            target = self._resolve_child(source_dir, path_value)
 
             is_directory = bool(item.get("is_directory", False))
             if is_directory:
                 try:
                     target.mkdir(parents=True, exist_ok=False)
                 except FileExistsError:
-                    raise RuntimeError(f"Target already exists: {name!r}") from None
+                    raise RuntimeError(f"Target already exists: {path_value!r}") from None
             else:
                 content_bytes = self._decode_content(item)
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -261,7 +287,7 @@ class LocalFSBackend(BlobStorageBackend):
                     with target.open("xb") as f:
                         f.write(content_bytes)
                 except FileExistsError:
-                    raise RuntimeError(f"Target already exists: {name!r}") from None
+                    raise RuntimeError(f"Target already exists: {path_value!r}") from None
 
             affected += 1
 
@@ -281,19 +307,19 @@ class LocalFSBackend(BlobStorageBackend):
         Raises:
             RuntimeError: If file not found or payload is invalid.
         """
-        file_name = self._extract_name_from_predicates(intent.predicates)
-        if file_name is None:
+        file_path = self._extract_path_from_predicates(intent.predicates)
+        if file_path is None:
             raise RuntimeError(
-                "REVISE requires a predicate with field_id='name' to identify the file"
+                "REVISE requires a predicate with field_id='path' to identify the file"
             )
 
-        target = self._resolve_child(source_dir, file_name)
+        target = self._resolve_child(source_dir, file_path)
 
         if not target.exists():
-            raise RuntimeError(f"File not found: {file_name!r}")
+            raise RuntimeError(f"File not found: {file_path!r}")
 
         if not target.is_file():
-            raise RuntimeError(f"Path is not a file: {file_name!r}")
+            raise RuntimeError(f"Path is not a file: {file_path!r}")
 
         content_bytes = self._decode_content(intent.payload)
         target.write_bytes(content_bytes)
@@ -342,32 +368,38 @@ class LocalFSBackend(BlobStorageBackend):
 
         return target
 
-    def _resolve_child(self, parent: Path, name: str) -> Path:
-        """Resolve and validate a child path within a directory.
+    def _resolve_child(self, parent: Path, relative_path: str) -> Path:
+        """Resolve and validate a relative path within a directory.
+
+        Supports multi-component paths (e.g., ``"2024/reports/file.csv"``).
 
         Args:
             parent: The parent directory.
-            name: The child file/directory name.
+            relative_path: Relative path to the target entry.
 
         Returns:
-            The resolved absolute child path.
+            The resolved absolute path.
 
         Raises:
-            RuntimeError: If name contains path separators, traversal, or
-                escapes the parent directory.
+            RuntimeError: If path is empty, absolute, contains ``..``,
+                or escapes the root directory.
         """
-        if os.sep in name or (os.altsep and os.altsep in name):
-            raise RuntimeError(f"Name must not contain path separators: {name!r}")
-        if name in (".", ".."):
-            raise RuntimeError(f"Invalid name: {name!r}")
+        if not relative_path or not relative_path.strip():
+            raise RuntimeError("Path must not be empty")
 
-        target = (parent / name).resolve(strict=False)
+        child_path = Path(relative_path)
+        if child_path.is_absolute():
+            raise RuntimeError(f"Absolute paths are not allowed: {relative_path!r}")
+        if ".." in child_path.parts:
+            raise RuntimeError(f"Path traversal (..) is not allowed: {relative_path!r}")
+
+        target = (parent / child_path).resolve(strict=False)
 
         if not self._is_within_root(target):
-            raise RuntimeError(f"Path escapes root: {name!r}")
+            raise RuntimeError(f"Path escapes root: {relative_path!r}")
 
-        if not self._config.allow_symlinks and (parent / name).is_symlink():
-            raise RuntimeError(f"Symlinks are not allowed: {name!r}")
+        if not self._config.allow_symlinks and (parent / child_path).is_symlink():
+            raise RuntimeError(f"Symlinks are not allowed: {relative_path!r}")
 
         return target
 
@@ -384,27 +416,30 @@ class LocalFSBackend(BlobStorageBackend):
     # Metadata and filtering helpers
     # -------------------------------------------------------------------------
 
-    def _build_entry_metadata(self, path: Path) -> dict[str, Any]:
+    def _build_entry_metadata(self, entry: Path, source_root: Path) -> dict[str, Any]:
         """Build convention-based metadata for a filesystem entry.
 
         Args:
-            path: Absolute path to the file or directory.
+            entry: Absolute path to the file or directory.
+            source_root: The resource's source directory (used to compute
+                the relative ``path`` value).
 
         Returns:
-            Dict with metadata fields: name, size, last_modified,
+            Dict with metadata fields: path, size, last_modified,
             created_at, content_type, is_directory.
         """
-        stat = path.stat()
+        stat = entry.stat()
 
         created_ts = getattr(stat, "st_birthtime", None)
         if created_ts is None:
             created_ts = stat.st_ctime
 
-        is_dir = path.is_dir()
-        content_type = "" if is_dir else (mimetypes.guess_type(path.name)[0] or "")
+        is_dir = entry.is_dir()
+        content_type = "" if is_dir else (mimetypes.guess_type(entry.name)[0] or "")
+        rel_path = str(entry.relative_to(source_root)).replace("\\", "/")
 
         return {
-            "name": path.name,
+            "path": rel_path,
             "size": 0 if is_dir else stat.st_size,
             "last_modified": _timestamp_to_iso(stat.st_mtime),
             "created_at": _timestamp_to_iso(created_ts),
@@ -539,26 +574,67 @@ class LocalFSBackend(BlobStorageBackend):
                 f"Unsupported predicate operator for local filesystem backend: {pred.op!r}"
             )
 
-    @staticmethod
-    def _extract_name_from_predicates(predicates: PredicateGroup | None) -> str | None:
-        """Extract the ``name`` value from a predicate group.
+    def _pop_path_eq_predicate(
+        self, predicates: PredicateGroup | None
+    ) -> tuple[str | None, PredicateGroup | None]:
+        """Extract a ``path EQ`` predicate for directory/file selection in QUERY.
 
-        Recursively searches nested groups for a ``name == <value>`` predicate.
+        Validates that at most one ``path`` predicate exists at the top level.
+        If the predicate uses EQ, it is consumed (removed from the returned
+        group) and its value is returned for directory/file resolution.
+        Non-EQ ``path`` predicates are kept as regular filters.
+
+        Args:
+            predicates: The top-level predicate group.
+
+        Returns:
+            A tuple of (path_value, remaining_predicates).
+
+        Raises:
+            RuntimeError: If more than one ``path`` predicate exists at the
+                top level.
+        """
+        if predicates is None:
+            return None, None
+
+        path_preds = [
+            p for p in predicates.predicates if isinstance(p, Predicate) and p.field_id == "path"
+        ]
+
+        if len(path_preds) > 1:
+            raise RuntimeError("Only one 'path' predicate is allowed per query")
+
+        if not path_preds:
+            return None, predicates
+
+        path_pred = path_preds[0]
+        if path_pred.op != PredicateOperator.EQ:
+            return None, predicates
+
+        remaining = [p for p in predicates.predicates if p is not path_pred]
+        remaining_group = PredicateGroup(predicates=remaining, op=predicates.op)
+        return str(path_pred.value), remaining_group
+
+    @staticmethod
+    def _extract_path_from_predicates(predicates: PredicateGroup | None) -> str | None:
+        """Extract the ``path`` value from a predicate group.
+
+        Recursively searches nested groups for a ``path == <value>`` predicate.
 
         Args:
             predicates: PredicateGroup from the intent.
 
         Returns:
-            The name string, or None if not found.
+            The path string, or None if not found.
         """
         if predicates is None:
             return None
 
         for pred in predicates.predicates:
-            if isinstance(pred, Predicate) and pred.field_id == "name" and pred.op == "EQ":
+            if isinstance(pred, Predicate) and pred.field_id == "path" and pred.op == "EQ":
                 return str(pred.value)
             if isinstance(pred, PredicateGroup):
-                result = LocalFSBackend._extract_name_from_predicates(pred)
+                result = LocalFSBackend._extract_path_from_predicates(pred)
                 if result is not None:
                     return result
 
