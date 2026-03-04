@@ -159,7 +159,7 @@ class ValidateHandler(Handler):
         )
 
         fields = self._extract_fields(resource)
-        field_map = {f.field_id: f for f in fields}
+        field_map = {f.field_id: f for f in fields} if fields is not None else None
 
         issues: list[ValidationIssue] = []
         intent = request.intent
@@ -195,16 +195,22 @@ class ValidateHandler(Handler):
     # Intent-specific validation
     # ------------------------------------------------------------------
 
-    def _extract_fields(self, resource: CuratedResource) -> list[Field]:
-        """Extract fields from the resource's source definition."""
-        if resource.source_definition.fields:
-            return list(resource.source_definition.fields)
-        return []
+    def _extract_fields(self, resource: CuratedResource) -> list[Field] | None:
+        """Extract fields from the resource's source definition.
+
+        Returns:
+            The declared field list, or ``None`` when the resource is
+            schema-less (e.g. opaque blob stores) and field validation
+            should be skipped.
+        """
+        return (
+            list(resource.source_definition.fields) if resource.source_definition.fields else None
+        )
 
     def _validate_lookup(
         self,
         intent: LookupIntent,
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a LOOKUP intent."""
@@ -216,7 +222,7 @@ class ValidateHandler(Handler):
     def _validate_query(
         self,
         intent: QueryIntent,
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a QUERY intent."""
@@ -226,7 +232,7 @@ class ValidateHandler(Handler):
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
             self._check_field_exists(pred.field_id, field_map, issues)
-            if pred.field_id in field_map:
+            if field_map is not None and pred.field_id in field_map:
                 self._check_operator(pred.field_id, pred.op, field_map, issues)
 
         if intent.projections:
@@ -239,7 +245,7 @@ class ValidateHandler(Handler):
     def _validate_ingest(
         self,
         intent: IngestIntent,
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
         """Validate an INGEST intent."""
@@ -253,7 +259,7 @@ class ValidateHandler(Handler):
     def _validate_revise(
         self,
         intent: ReviseIntent,
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
         """Validate a REVISE intent."""
@@ -263,7 +269,7 @@ class ValidateHandler(Handler):
         predicates = _collect_predicates(intent.predicates)
         for pred in predicates:
             self._check_field_exists(pred.field_id, field_map, issues)
-            if pred.field_id in field_map:
+            if field_map is not None and pred.field_id in field_map:
                 self._check_operator(pred.field_id, pred.op, field_map, issues)
 
         for key in intent.payload:
@@ -276,10 +282,16 @@ class ValidateHandler(Handler):
     def _check_field_exists(
         self,
         field_id: str,
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
-        """Check that a field exists in the resource schema."""
+        """Check that a field exists in the resource schema.
+
+        When ``field_map`` is ``None`` the resource is schema-less and
+        field-existence checks are skipped.
+        """
+        if field_map is None:
+            return
         if field_id not in field_map:
             issues.append(
                 ValidationIssue(
@@ -365,7 +377,7 @@ class ValidateHandler(Handler):
     def _check_projections(
         self,
         projections: list[str],
-        field_map: dict[str, Field],
+        field_map: dict[str, Field] | None,
         issues: list[ValidationIssue],
     ) -> None:
         """Check that all projection fields exist in the resource schema."""

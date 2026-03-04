@@ -613,6 +613,7 @@ class TestValidateResourceNotFound(unittest.IsolatedAsyncioTestCase):
 
 class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
     async def test_resource_with_no_fields(self) -> None:
+        """Schema-less resources (fields=None) skip field-existence checks."""
         resource = CuratedResource(
             resource_id="com.acme:empty",
             intent_classes=[IntentClass.QUERY],
@@ -635,9 +636,8 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
         )
 
         data = result.model_dump(by_alias=True, exclude_none=True)
-        self.assertFalse(data["valid"])
-        fnf_issues = [i for i in data["issues"] if i["code"] == "FIELD_NOT_FOUND"]
-        self.assertGreaterEqual(len(fnf_issues), 1)
+        self.assertTrue(data["valid"])
+        self.assertNotIn("issues", data)
 
     async def test_multiple_issues_collected(self) -> None:
         resource = _make_resource()
