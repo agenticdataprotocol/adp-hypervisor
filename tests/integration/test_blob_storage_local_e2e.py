@@ -158,15 +158,30 @@ class TestBlobStorageLocalE2E(unittest.IsolatedAsyncioTestCase):
         self._tmpdir.cleanup()
 
     async def _send(self, requests: list[str]) -> list[dict[str, Any]]:
-        """Start the server, send requests, and return parsed responses."""
-        for req in requests:
+        """Start the server, send requests, and return parsed responses.
+
+        An ``adp.initialize`` handshake is automatically prepended so that
+        subsequent requests are accepted by the server's auth layer.
+        """
+        init_req = _jsonrpc_request(
+            "adp.initialize",
+            {
+                "protocolVersion": "2026-01-20",
+                "capabilities": {},
+                "clientInfo": {"name": "blob-e2e-test", "version": "1.0"},
+            },
+            rid=0,
+        )
+        all_requests = [init_req] + requests
+
+        for req in all_requests:
             self.transport.enqueue(req)
 
         server_task = asyncio.create_task(self.server.start())
 
         for _ in range(50):
             await asyncio.sleep(0.1)
-            if len(self.transport._responses) >= len(requests):
+            if len(self.transport._responses) >= len(all_requests):
                 break
 
         await self.server.stop()
@@ -176,7 +191,9 @@ class TestBlobStorageLocalE2E(unittest.IsolatedAsyncioTestCase):
         except asyncio.CancelledError:
             pass
 
-        return [json.loads(r) for r in self.transport._responses]
+        parsed = [json.loads(r) for r in self.transport._responses]
+        # Strip the initialize response
+        return parsed[1:]
 
     # ------------------------------------------------------------------
     # Test cases
