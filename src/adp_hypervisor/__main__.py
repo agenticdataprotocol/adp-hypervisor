@@ -88,7 +88,13 @@ def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
     # Accept a missing policy file gracefully — ACCESS enforcement uses
     # closed-by-default semantics, so an empty policy file simply denies all.
     if not policy_path.exists():
-        policy_path.write_text("version: '1.0.0'\n", encoding="utf-8")
+        try:
+            policy_path.write_text("version: '1.0.0'\n", encoding="utf-8")
+        except OSError as exc:
+            raise FileNotFoundError(
+                f"Policy manifest not found at {policy_path} and could not be created. "
+                "Ensure the config directory is writable or provide a policy.yaml file."
+            ) from exc
 
     return YamlManifestProvider(
         physical_path=physical_path,

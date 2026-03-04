@@ -59,6 +59,7 @@ class BasicAuthenticator(Authenticator):
         """Parse a Basic Auth header and extract the username.
 
         Expects the format ``"Basic <base64(username:password)>"``.
+        The scheme comparison is case-insensitive per RFC 7235.
 
         .. note::
             Password verification is not yet implemented.
@@ -69,15 +70,19 @@ class BasicAuthenticator(Authenticator):
         Returns:
             The extracted username, or ``None`` if parsing fails.
         """
-        if not authorization.startswith("Basic "):
+        scheme, _, payload = authorization.partition(" ")
+        if scheme.lower() != "basic":
             return None
 
-        encoded = authorization[6:].strip()
+        encoded = payload.strip()
         if not encoded:
             return None
 
+        # Pad base64 if needed — some clients omit trailing '='
+        padded = encoded + "=" * (-len(encoded) % 4)
+
         try:
-            decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+            decoded = base64.b64decode(padded).decode("utf-8")
         except (ValueError, UnicodeDecodeError):
             return None
 

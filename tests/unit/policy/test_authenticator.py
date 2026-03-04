@@ -116,6 +116,26 @@ class TestBasicAuthenticator(unittest.TestCase):
         params = _params_with_auth(_basic_auth("alice"))
         self.assertEqual(self.authenticator.authenticate(params), "alice")
 
+    # -- RFC compliance -------------------------------------------------------
+
+    def test_scheme_case_insensitive_lowercase(self) -> None:
+        """Lowercase 'basic' scheme is accepted per RFC 7235."""
+        encoded = base64.b64encode(b"alice:pass").decode()
+        params = _params_with_auth(f"basic {encoded}")
+        self.assertEqual(self.authenticator.authenticate(params), "alice")
+
+    def test_scheme_case_insensitive_uppercase(self) -> None:
+        """Uppercase 'BASIC' scheme is accepted per RFC 7235."""
+        encoded = base64.b64encode(b"alice:pass").decode()
+        params = _params_with_auth(f"BASIC {encoded}")
+        self.assertEqual(self.authenticator.authenticate(params), "alice")
+
+    def test_base64_missing_padding(self) -> None:
+        """Base64 with missing padding is accepted."""
+        encoded = base64.b64encode(b"alice:pass").decode().rstrip("=")
+        params = _params_with_auth(f"Basic {encoded}")
+        self.assertEqual(self.authenticator.authenticate(params), "alice")
+
 
 if __name__ == "__main__":
     unittest.main()
