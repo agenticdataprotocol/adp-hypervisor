@@ -195,9 +195,21 @@ class ADPServer:
         """Load manifests from the provider and build the index."""
         self._manifest_provider.load()
         self._manifest_index = ManifestIndex(self._manifest_provider)
+
+        self._inject_convention_fields()
+
         # Expose manifest index globally so backends can resolve resources
         set_global_manifest_index(self._manifest_index)
         logger.info("Manifests loaded")
+
+    def _inject_convention_fields(self) -> None:
+        """Inject backend convention fields into schema-less resources."""
+        assert self._manifest_index is not None
+
+        from adp_hypervisor.manifest.physical import BackendType
+        from backends.blob_storage import CONVENTION_FIELDS
+
+        self._manifest_index.inject_convention_fields(BackendType.BLOB_STORAGE, CONVENTION_FIELDS)
 
     async def _initialize_backends(self) -> None:
         """Create and connect backend instances from the physical manifest."""

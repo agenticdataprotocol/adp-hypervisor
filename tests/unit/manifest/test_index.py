@@ -394,3 +394,120 @@ class TestManifestIndexResourceSelectorDefensive(unittest.TestCase):
         self.assertEqual(len(access_only), 1)
         self.assertEqual(access_only[0].resource_selector, "com.acme:events")
         self.assertIsNotNone(index.get_access_policy("com.acme:events"))
+
+
+# =============================================================================
+# TestManifestIndexConventionFieldInjection
+# =============================================================================
+
+
+class TestManifestIndexConventionFieldInjection(unittest.TestCase):
+    """Test inject_convention_fields for schema-less resources."""
+
+    def _make_manifests_with_blob(
+        self, *, with_fields: bool = False
+    ) -> tuple[PhysicalManifest, SemanticManifest, PolicyManifest]:
+        physical = PhysicalManifest.model_validate(
+            {
+                "version": "1.0.0",
+                "backends": [
+                    {
+                        "id": "blob1",
+                        "type": "BLOB_STORAGE",
+                        "provider": "local",
+                        "config": {"type": "BLOB_STORAGE", "uri": "/tmp/data"},
+                    },
+                    {
+                        "id": "db1",
+                        "type": "RDBMS",
+                        "provider": "postgresql",
+                        "config": {"type": "RDBMS", "uri": "postgresql://localhost/db"},
+                    },
+                ],
+            }
+        )
+        fields = [{"fieldId": "col1", "type": "STRING"}] if with_fields else None
+        resource_def: dict[str, object] = {
+            "resourceId": "ns:blob-res",
+            "intentClasses": ["QUERY"],
+            "version": 1,
+            "backendId": "blob1",
+            "sourceDefinition": {"source": "data"},
+        }
+        if fields is not None:
+            resource_def["sourceDefinition"] = {"source": "data", "fields": fields}
+        semantic = SemanticManifest.model_validate(
+            {
+                "version": "1.0.0",
+                "resources": [
+                    resource_def,
+                    {
+                        "resourceId": "ns:db-res",
+                        "intentClasses": ["QUERY"],
+                        "version": 1,
+                        "backendId": "db1",
+                        "sourceDefinition": {"source": "events"},
+                    },
+                ],
+            }
+        )
+        policy = PolicyManifest.model_validate({"version": "1.0.0", "policies": []})
+        return physical, semantic, policy
+
+    def test_injects_fields_into_schema_less_blob_storage_resource(self) -> None:
+        from adp_hypervisor.protocol.types import Field, FieldType
+
+        physical, semantic, policy = self._make_manifests_with_blob()
+        provider = _FakeProvider(physical=physical, semantic=semantic, policy=policy)
+        index = ManifestIndex(provider)
+
+        convention = [
+            Field(field_id="path", type=FieldType.STRING, description="Path"),
+            Field(field_id="size", type=FieldType.INTEGER, description="Size"),
+        ]
+        index.inject_convention_fields(BackendType.BLOB_STORAGE, convention)
+
+        blob_res = index.get_resource("ns:blob-res")
+        self.assertIsNotNone(blob_res)
+        assert blob_res is not None
+        self.assertIsNotNone(blob_res.source_definition.fields)
+        assert blob_res.source_definition.fields is not None
+        self.assertEqual(len(blob_res.source_definition.fields), 2)
+        self.assertEqual(blob_res.source_definition.fields[0].field_id, "path")
+
+    def test_does_not_overwrite_existing_fields(self) -> None:
+        from adp_hypervisor.protocol.types import Field, FieldType
+
+        physical, semantic, policy = self._make_manifests_with_blob(with_fields=True)
+        provider = _FakeProvider(physical=physical, semantic=semantic, policy=policy)
+        index = ManifestIndex(provider)
+
+        convention = [
+            Field(field_id="path", type=FieldType.STRING, description="Path"),
+        ]
+        index.inject_convention_fields(BackendType.BLOB_STORAGE, convention)
+
+        blob_res = index.get_resource("ns:blob-res")
+        self.assertIsNotNone(blob_res)
+        assert blob_res is not None
+        self.assertIsNotNone(blob_res.source_definition.fields)
+        assert blob_res.source_definition.fields is not None
+        self.assertEqual(len(blob_res.source_definition.fields), 1)
+        self.assertEqual(blob_res.source_definition.fields[0].field_id, "col1")
+
+    def test_does_not_affect_non_matching_backend_type(self) -> None:
+        from adp_hypervisor.protocol.types import Field, FieldType
+
+        physical, semantic, policy = self._make_manifests_with_blob()
+        provider = _FakeProvider(physical=physical, semantic=semantic, policy=policy)
+        index = ManifestIndex(provider)
+
+        convention = [
+            Field(field_id="path", type=FieldType.STRING, description="Path"),
+        ]
+        index.inject_convention_fields(BackendType.BLOB_STORAGE, convention)
+
+        db_res = index.get_resource("ns:db-res")
+        self.assertIsNotNone(db_res)
+        assert db_res is not None
+        self.assertIsNone(db_res.source_definition.fields)

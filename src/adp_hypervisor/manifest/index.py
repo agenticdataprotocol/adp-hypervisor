@@ -23,7 +23,7 @@ import re
 import threading
 from fnmatch import fnmatch
 
-from adp_hypervisor.manifest.physical import BackendDefinition
+from adp_hypervisor.manifest.physical import BackendDefinition, BackendType
 from adp_hypervisor.manifest.policy import (
     AccessPolicy,
     MandatoryFilterPolicy,
@@ -32,6 +32,7 @@ from adp_hypervisor.manifest.policy import (
 )
 from adp_hypervisor.manifest.provider import ManifestProvider
 from adp_hypervisor.manifest.semantic import CuratedResource
+from adp_hypervisor.protocol.types import Field
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,38 @@ class ManifestIndex:
         """Return all backend definitions."""
         self._ensure_indexes()
         return list(self._backends_by_id.values())
+
+    def inject_convention_fields(self, backend_type: BackendType, fields: list[Field]) -> None:
+        """Inject convention fields into schema-less resources of a given backend type.
+
+        For resources whose ``source_definition.fields`` is ``None`` and whose
+        backend matches ``backend_type``, this method sets the fields to the
+        provided convention field list.  Resources that already declare fields
+        are not modified.
+
+        Args:
+            backend_type: The backend type to match (e.g. ``BackendType.BLOB_STORAGE``).
+            fields: The convention fields to inject.
+        """
+        self._ensure_indexes()
+        injected = 0
+        for versions in self._resources_by_id.values():
+            for resource in versions:
+                if resource.source_definition.fields is not None:
+                    continue
+                backend_def = self._backends_by_id.get(resource.backend_id)
+                if backend_def is None or backend_def.type != backend_type:
+                    continue
+                resource.source_definition.fields = list(fields)
+                injected += 1
+
+        if injected:
+            logger.info(
+                "Injected %d convention fields into %d schema-less %s resources",
+                len(fields),
+                injected,
+                backend_type.value,
+            )
 
     # Resources --------------------------------------------------------
 
