@@ -26,7 +26,14 @@ from adp_hypervisor.manifest.physical import (
     BackendType,
 )
 from adp_hypervisor.manifest.provider import ManifestProvider
-from adp_hypervisor.policy import PolicyEnforcer, RoleResolver, SimpleAuthResolver, UserRoleConfig
+from adp_hypervisor.policy import (
+    Authenticator,
+    BasicAuthenticator,
+    PolicyEnforcer,
+    RoleResolver,
+    UserRoleConfig,
+    YamlRoleResolver,
+)
 from adp_hypervisor.protocol.dispatcher import Dispatcher
 from adp_hypervisor.transport.base import Transport
 from adp_hypervisor.transport.stdio import StdioTransport
@@ -86,6 +93,7 @@ class ADPServer:
         self,
         manifest_provider: ManifestProvider,
         transport: Transport | None = None,
+        authenticator: Authenticator | None = None,
         role_resolver: RoleResolver | None = None,
     ) -> None:
         """Initialize the server.
@@ -94,12 +102,14 @@ class ADPServer:
             manifest_provider: Provider that loads physical, semantic,
                 and policy manifests from any storage backend.
             transport: Optional transport instance. Defaults to StdioTransport.
-            role_resolver: Optional role resolver. Defaults to a resolver
+            authenticator: Optional authenticator. Defaults to BasicAuthenticator.
+            role_resolver: Optional role resolver. Defaults to a YamlRoleResolver
                 with empty configuration.
         """
         self._manifest_provider = manifest_provider
         self._transport = transport or StdioTransport()
-        self._role_resolver = role_resolver or SimpleAuthResolver(UserRoleConfig())
+        self._authenticator = authenticator or BasicAuthenticator()
+        self._role_resolver = role_resolver or YamlRoleResolver(UserRoleConfig())
         self._dispatcher = Dispatcher()
         self._backend_registry = BackendRegistry()
         self._manifest_index: ManifestIndex | None = None
@@ -205,7 +215,9 @@ class ADPServer:
         """Create and register all ADP handlers with the dispatcher."""
         assert self._manifest_index is not None
 
-        policy_enforcer = PolicyEnforcer(self._manifest_index, self._role_resolver)
+        policy_enforcer = PolicyEnforcer(
+            self._manifest_index, self._authenticator, self._role_resolver
+        )
 
         handlers = [
             InitializeHandler(),

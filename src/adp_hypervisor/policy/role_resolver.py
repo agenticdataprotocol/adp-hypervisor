@@ -5,7 +5,6 @@ Defines the role resolution interface (ABC) and the user-role config model.
 """
 
 import abc
-from typing import Any
 
 from pydantic import Field as PydanticField
 
@@ -30,25 +29,19 @@ class UserRoleConfig(ADPModel):
 
 
 class RoleResolver(abc.ABC):
-    """Abstract interface for resolving user identity to a role.
+    """Abstract interface for mapping a username to a role.
 
-    Implementations extract user identity from JSON-RPC request params
-    and map it to a role string used by ACCESS policy enforcement.
-
-    Subclass this to integrate with different auth backends
-    (e.g. Gravitino, OAuth, LDAP).
+    Implementations look up the role for a given username using
+    a configured data source (e.g. YAML file, Gravitino, LDAP).
     """
 
     @abc.abstractmethod
-    def resolve(self, params: dict[str, Any]) -> str:
-        """Resolve user identity from request params to a role.
+    def resolve(self, user: str) -> str:
+        """Resolve a username to a role string.
 
         Args:
-            params: The raw JSON-RPC request parameters dict.
+            user: The authenticated username.
 
         Returns:
             The resolved role string.
-
-        Raises:
-            UnauthorizedError: If credentials are missing or malformed.
         """

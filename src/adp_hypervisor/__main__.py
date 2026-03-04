@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
-from adp_hypervisor.policy import RoleResolver, SimpleAuthResolver, UserRoleConfig
+from adp_hypervisor.policy import UserRoleConfig, YamlRoleResolver
 from adp_hypervisor.server import ADPServer
 from adp_hypervisor.transport.stdio import StdioTransport
 
@@ -97,7 +97,7 @@ def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
     )
 
 
-def _create_role_resolver(config_dir: Path) -> RoleResolver:
+def _create_role_resolver(config_dir: Path) -> YamlRoleResolver:
     """Create a role resolver from a config directory.
 
     Loads the user-to-role mapping from ``users.yaml`` in the config
@@ -108,12 +108,12 @@ def _create_role_resolver(config_dir: Path) -> RoleResolver:
         config_dir: Path to the directory containing users.yaml.
 
     Returns:
-        A configured RoleResolver instance.
+        A configured YamlRoleResolver instance.
     """
     users_path = config_dir / "users.yaml"
     if not users_path.exists():
         logger.info("No users.yaml found in %s, using default role config", config_dir)
-        return SimpleAuthResolver(UserRoleConfig())
+        return YamlRoleResolver(UserRoleConfig())
 
     import yaml
 
@@ -122,14 +122,14 @@ def _create_role_resolver(config_dir: Path) -> RoleResolver:
         config = UserRoleConfig.model_validate(raw or {})
     except (yaml.YAMLError, ValueError) as exc:
         logger.error("Failed to load %s, using default role config: %s", users_path, exc)
-        return SimpleAuthResolver(UserRoleConfig())
+        return YamlRoleResolver(UserRoleConfig())
 
     logger.info(
         "Loaded user-role config: %d users, default_role=%r",
         len(config.users),
         config.default_role,
     )
-    return SimpleAuthResolver(config)
+    return YamlRoleResolver(config)
 
 
 def main(args: list[str] | None = None) -> None:

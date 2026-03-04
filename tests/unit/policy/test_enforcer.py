@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.policy import AccessPolicy, RoleAccessEntry
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
+from adp_hypervisor.policy.authenticator import Authenticator
 from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.policy.role_resolver import RoleResolver
 from adp_hypervisor.protocol.errors import UnauthorizedError
@@ -42,14 +43,21 @@ def _make_resource(resource_id: str) -> CuratedResource:
 
 def _make_enforcer(
     manifest_index: ManifestIndex | None = None,
+    authenticator: Authenticator | None = None,
     role_resolver: RoleResolver | None = None,
 ) -> PolicyEnforcer:
     """Create a PolicyEnforcer with mocked dependencies."""
     if manifest_index is None:
         manifest_index = MagicMock(spec=ManifestIndex)
+    if authenticator is None:
+        authenticator = MagicMock(spec=Authenticator)
     if role_resolver is None:
         role_resolver = MagicMock(spec=RoleResolver)
-    return PolicyEnforcer(manifest_index=manifest_index, role_resolver=role_resolver)
+    return PolicyEnforcer(
+        manifest_index=manifest_index,
+        authenticator=authenticator,
+        role_resolver=role_resolver,
+    )
 
 
 # =============================================================================
@@ -219,17 +227,20 @@ class TestFilterAccessibleResources(unittest.TestCase):
 class TestResolveRole(unittest.TestCase):
     """Tests for PolicyEnforcer.resolve_role."""
 
-    def test_delegates_to_role_resolver(self) -> None:
-        """Verify resolve_role delegates to RoleResolver.resolve."""
+    def test_delegates_to_authenticator_and_role_resolver(self) -> None:
+        """Verify resolve_role authenticates then resolves role."""
+        authenticator = MagicMock(spec=Authenticator)
+        authenticator.authenticate.return_value = "alice"
         resolver = MagicMock(spec=RoleResolver)
         resolver.resolve.return_value = "analyst"
-        enforcer = _make_enforcer(role_resolver=resolver)
+        enforcer = _make_enforcer(authenticator=authenticator, role_resolver=resolver)
         params = {"_meta": {"authorization": "Basic dXNlcjpwYXNz"}}
 
         role = enforcer.resolve_role(params)
 
         self.assertEqual(role, "analyst")
-        resolver.resolve.assert_called_once_with(params)
+        authenticator.authenticate.assert_called_once_with(params)
+        resolver.resolve.assert_called_once_with("alice")
 
 
 if __name__ == "__main__":

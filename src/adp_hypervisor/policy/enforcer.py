@@ -2,8 +2,8 @@
 Policy Enforcer.
 
 Enforces ACCESS policy rules defined in the policy manifest.
-Delegates role resolution to ``RoleResolver`` and uses
-``ManifestIndex`` for policy lookups.
+Delegates authentication to ``Authenticator`` and role resolution
+to ``RoleResolver``, then uses ``ManifestIndex`` for policy lookups.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from adp_hypervisor.policy.authenticator import Authenticator
 from adp_hypervisor.policy.role_resolver import RoleResolver
 from adp_hypervisor.protocol.errors import UnauthorizedError
 from adp_hypervisor.protocol.types import IntentClass
@@ -26,28 +27,37 @@ logger = logging.getLogger(__name__)
 class PolicyEnforcer:
     """Enforces ACCESS policy rules for ADP requests.
 
-    Uses ``ManifestIndex`` for policy lookups and ``RoleResolver`` for
-    extracting the current user's role from request metadata.
+    Uses ``ManifestIndex`` for policy lookups, ``Authenticator`` for
+    extracting user identity, and ``RoleResolver`` for mapping users
+    to roles.
 
     ACCESS enforcement follows the closed-by-default model: if no ACCESS
     policy matches a resource, all access is denied regardless of role
     or intent class.
     """
 
-    def __init__(self, manifest_index: ManifestIndex, role_resolver: RoleResolver) -> None:
+    def __init__(
+        self,
+        manifest_index: ManifestIndex,
+        authenticator: Authenticator,
+        role_resolver: RoleResolver,
+    ) -> None:
         """Initialize the enforcer.
 
         Args:
             manifest_index: Index for looking up ACCESS policies.
-            role_resolver: Resolver for extracting roles from request params.
+            authenticator: Authenticator for extracting user identity.
+            role_resolver: Resolver for mapping usernames to roles.
         """
         self._manifest_index = manifest_index
+        self._authenticator = authenticator
         self._role_resolver = role_resolver
 
     def resolve_role(self, params: dict[str, Any]) -> str:
         """Resolve the current request's role from params metadata.
 
-        Delegates to ``RoleResolver.resolve()``.
+        Authenticates the user via ``Authenticator.authenticate()``,
+        then resolves the role via ``RoleResolver.resolve()``.
 
         Args:
             params: The raw JSON-RPC request parameters dict.
@@ -55,7 +65,8 @@ class PolicyEnforcer:
         Returns:
             The resolved role string.
         """
-        return self._role_resolver.resolve(params)
+        user = self._authenticator.authenticate(params)
+        return self._role_resolver.resolve(user)
 
     def check_access(self, resource_id: str, role: str, intent_class: IntentClass) -> None:
         """Check ACCESS policy for a (resource, role, intent) triple.

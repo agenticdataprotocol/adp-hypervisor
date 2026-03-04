@@ -135,12 +135,12 @@ def _write_manifest_files(tmpdir: Path, dsn: str) -> None:
             yaml.dump(data, f)
 
 
-def _simple_auth(username: str, password: str = "") -> str:
-    """Build a Simple Auth header value."""
+def _basic_auth(username: str, password: str = "") -> str:
+    """Build a Basic Auth header value."""
     return "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
 
 
-_DEFAULT_META: dict[str, str] = {"authorization": _simple_auth("testuser")}
+_DEFAULT_META: dict[str, str] = {"authorization": _basic_auth("testuser")}
 
 
 def _jsonrpc_request(method: str, params: dict[str, Any] | None = None, rid: int = 1) -> str:
