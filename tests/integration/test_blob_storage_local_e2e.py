@@ -8,6 +8,7 @@ No external dependencies (containers, databases) are required.
 """
 
 import asyncio
+import base64
 import json
 import tempfile
 import unittest
@@ -27,11 +28,21 @@ from adp_hypervisor.transport.base import Transport
 _RESOURCE_ID = "com.test:local_files"
 
 
+def _basic_auth(username: str, password: str = "") -> str:
+    """Build a Basic Auth header value."""
+    return "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
+
+
+_DEFAULT_META: dict[str, str] = {"authorization": _basic_auth("testuser")}
+
+
 def _jsonrpc_request(method: str, params: dict[str, Any] | None = None, rid: int = 1) -> str:
     """Build a JSON-RPC 2.0 request string."""
     msg: dict[str, Any] = {"jsonrpc": "2.0", "id": rid, "method": method}
     if params is not None:
-        msg["params"] = params
+        msg["params"] = {**params, "_meta": _DEFAULT_META}
+    else:
+        msg["params"] = {"_meta": _DEFAULT_META}
     return json.dumps(msg)
 
 
@@ -97,7 +108,16 @@ def _write_manifest_files(manifest_dir: Path, data_root: str) -> None:
             }
         ],
     }
-    policy: dict[str, object] = {"version": "1.0.0"}
+    policy: dict[str, object] = {
+        "version": "1.0.0",
+        "policies": [
+            {
+                "type": "ACCESS",
+                "resourceSelector": "*",
+                "roles": [{"role": "default", "allowedIntents": ["*"]}],
+            }
+        ],
+    }
 
     for name, data in [
         ("physical.yaml", physical),
@@ -158,30 +178,15 @@ class TestBlobStorageLocalE2E(unittest.IsolatedAsyncioTestCase):
         self._tmpdir.cleanup()
 
     async def _send(self, requests: list[str]) -> list[dict[str, Any]]:
-        """Start the server, send requests, and return parsed responses.
-
-        An ``adp.initialize`` handshake is automatically prepended so that
-        subsequent requests are accepted by the server's auth layer.
-        """
-        init_req = _jsonrpc_request(
-            "adp.initialize",
-            {
-                "protocolVersion": "2026-01-20",
-                "capabilities": {},
-                "clientInfo": {"name": "blob-e2e-test", "version": "1.0"},
-            },
-            rid=0,
-        )
-        all_requests = [init_req] + requests
-
-        for req in all_requests:
+        """Start the server, send requests, and return parsed responses."""
+        for req in requests:
             self.transport.enqueue(req)
 
         server_task = asyncio.create_task(self.server.start())
 
         for _ in range(50):
             await asyncio.sleep(0.1)
-            if len(self.transport._responses) >= len(all_requests):
+            if len(self.transport._responses) >= len(requests):
                 break
 
         await self.server.stop()
@@ -191,9 +196,7 @@ class TestBlobStorageLocalE2E(unittest.IsolatedAsyncioTestCase):
         except asyncio.CancelledError:
             pass
 
-        parsed = [json.loads(r) for r in self.transport._responses]
-        # Strip the initialize response
-        return parsed[1:]
+        return [json.loads(r) for r in self.transport._responses]
 
     # ------------------------------------------------------------------
     # Test cases
