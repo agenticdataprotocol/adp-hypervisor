@@ -38,6 +38,16 @@ CONVENTION_FIELDS: list[Field] = [
         type=FieldType.BOOLEAN,
         description="Whether the entry is a directory",
     ),
+    Field(
+        field_id="content",
+        type=FieldType.BLOB,
+        description="File content (text or base64-encoded binary); used in LOOKUP/INGEST/REVISE",
+    ),
+    Field(
+        field_id="content_encoding",
+        type=FieldType.STRING,
+        description="Encoding of the content field: 'utf-8' for text, 'base64' for binary",
+    ),
 ]
 
 __all__ = [

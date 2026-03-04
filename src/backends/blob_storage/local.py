@@ -68,7 +68,12 @@ class LocalFSBackend(BlobStorageBackend):
         Raises:
             ConnectionError: If the root URI is invalid or inaccessible.
         """
-        root = Path(self._config.uri).expanduser().resolve()
+        raw = Path(self._config.uri).expanduser()
+
+        if not self._config.allow_symlinks and raw.is_symlink():
+            raise ConnectionError(f"Root path is a symlink (symlinks disabled): {raw}")
+
+        root = raw.resolve()
 
         if not root.exists():
             raise ConnectionError(f"Root path does not exist: {root}")
@@ -78,9 +83,6 @@ class LocalFSBackend(BlobStorageBackend):
 
         if not os.access(root, os.R_OK | os.X_OK):
             raise ConnectionError(f"Root path is not readable/traversable: {root}")
-
-        if not self._config.allow_symlinks and root.is_symlink():
-            raise ConnectionError(f"Root path is a symlink (symlinks disabled): {root}")
 
         self._root = root
         self._connected = True
@@ -373,8 +375,15 @@ class LocalFSBackend(BlobStorageBackend):
 
         Supports multi-component paths (e.g., ``"2024/reports/file.csv"``).
 
+        Security checks performed:
+        - Path must not be empty, absolute, or contain ``..``
+        - Resolved path must stay within ``parent`` (resource boundary)
+        - All intermediate path components are checked for symlinks
+          when ``allow_symlinks`` is disabled
+        - Path must not match any ``ignore_patterns``
+
         Args:
-            parent: The parent directory.
+            parent: The parent directory (resource source root).
             relative_path: Relative path to the target entry.
 
         Returns:
@@ -382,7 +391,8 @@ class LocalFSBackend(BlobStorageBackend):
 
         Raises:
             RuntimeError: If path is empty, absolute, contains ``..``,
-                or escapes the root directory.
+                escapes the parent directory, is a symlink when disallowed,
+                or matches an ignore pattern.
         """
         if not relative_path or not relative_path.strip():
             raise RuntimeError("Path must not be empty")
@@ -393,13 +403,22 @@ class LocalFSBackend(BlobStorageBackend):
         if ".." in child_path.parts:
             raise RuntimeError(f"Path traversal (..) is not allowed: {relative_path!r}")
 
+        if not self._config.allow_symlinks:
+            current = parent
+            for part in child_path.parts:
+                current = current / part
+                if current.is_symlink():
+                    raise RuntimeError(f"Symlinks are not allowed: {relative_path!r}")
+
         target = (parent / child_path).resolve(strict=False)
 
-        if not self._is_within_root(target):
-            raise RuntimeError(f"Path escapes root: {relative_path!r}")
+        try:
+            target.relative_to(parent)
+        except ValueError:
+            raise RuntimeError(f"Path escapes source directory: {relative_path!r}") from None
 
-        if not self._config.allow_symlinks and (parent / child_path).is_symlink():
-            raise RuntimeError(f"Symlinks are not allowed: {relative_path!r}")
+        if self._should_ignore(target):
+            raise RuntimeError(f"Path matches ignore pattern: {relative_path!r}")
 
         return target
 
@@ -538,7 +557,10 @@ class LocalFSBackend(BlobStorageBackend):
             PredicateOperator.LT,
             PredicateOperator.LTE,
         ):
-            if type(entry_val) is not type(pred_val):
+            both_numeric = isinstance(entry_val, (int, float)) and isinstance(
+                pred_val, (int, float)
+            )
+            if not both_numeric and type(entry_val) is not type(pred_val):
                 raise RuntimeError(
                     f"Type mismatch: field {field_id!r} is {type(entry_val).__name__}, "
                     f"but predicate value is {type(pred_val).__name__}"

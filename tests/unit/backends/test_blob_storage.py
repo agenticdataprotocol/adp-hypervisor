@@ -109,6 +109,29 @@ class TestLocalFSBackendConnect(unittest.IsolatedAsyncioTestCase):
             await backend.disconnect()
             self.assertFalse(backend._connected)
 
+    async def test_connect_rejects_symlink_root_when_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_dir = Path(tmpdir) / "real"
+            real_dir.mkdir()
+            symlink_dir = Path(tmpdir) / "link"
+            symlink_dir.symlink_to(real_dir)
+
+            backend = LocalFSBackend(_make_definition(uri=str(symlink_dir), allow_symlinks=False))
+            with self.assertRaises(ConnectionError, msg="symlink"):
+                await backend.connect()
+
+    async def test_connect_allows_symlink_root_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_dir = Path(tmpdir) / "real"
+            real_dir.mkdir()
+            symlink_dir = Path(tmpdir) / "link"
+            symlink_dir.symlink_to(real_dir)
+
+            backend = LocalFSBackend(_make_definition(uri=str(symlink_dir), allow_symlinks=True))
+            await backend.connect()
+            self.assertTrue(backend._connected)
+            await backend.disconnect()
+
 
 # =============================================================================
 # TestLocalFSBackendLookup
@@ -503,6 +526,34 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.rows[0]["path"], "large.txt")
             self.assertNotIn("size", result.rows[0])
 
+    async def test_predicate_int_vs_float_comparison(self) -> None:
+        """Numeric int vs float comparisons must not crash."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "big.txt").write_text("x" * 2000)
+            (source_dir / "small.txt").write_text("x")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="size", op=PredicateOperator.GT, value=1000.0),
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 1)
+            self.assertEqual(result.rows[0]["path"], "big.txt")
+
 
 # =============================================================================
 # TestLocalFSBackendIngest
@@ -783,6 +834,117 @@ class TestLocalFSBackendSecurity(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(RuntimeError, msg="not connected"):
             await backend.execute(intent)
+
+    async def test_intermediate_symlink_rejected(self) -> None:
+        """Symlinks in intermediate path components must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            hidden = Path(tmpdir) / "hidden"
+            hidden.mkdir()
+            (hidden / "secret.txt").write_text("sensitive")
+            (source_dir / "link").symlink_to(hidden)
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, allow_symlinks=False))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="link/secret.txt"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="Symlinks are not allowed"):
+                    await backend.execute(intent)
+
+    async def test_symlink_escapes_source_dir_rejected(self) -> None:
+        """Symlinks pointing outside source_dir are rejected even within root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_a = Path(tmpdir) / "resource_a"
+            source_a.mkdir()
+            source_b = Path(tmpdir) / "resource_b"
+            source_b.mkdir()
+            (source_b / "private.txt").write_text("private data")
+            (source_a / "escape").symlink_to(source_b)
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, allow_symlinks=True))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="escape/private.txt"),
+            )
+            mock_index = _mock_manifest_index("resource_a")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="escapes source directory"):
+                    await backend.execute(intent)
+
+    async def test_ignore_patterns_applied_to_lookup(self) -> None:
+        """LOOKUP on an ignored file must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "file.tmp").write_text("temp")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, ignore_patterns=["*.tmp"]))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="file.tmp"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="ignore pattern"):
+                    await backend.execute(intent)
+
+    async def test_ignore_patterns_applied_to_ingest(self) -> None:
+        """INGEST to an ignored path must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, ignore_patterns=["*.tmp"]))
+            await backend.connect()
+
+            intent = IngestIntent(
+                intent_class="INGEST",
+                resource_id=_RID,
+                payload=[{"path": "new.tmp", "content": "data"}],
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="ignore pattern"):
+                    await backend.execute(intent)
+
+    async def test_ignore_patterns_applied_to_revise(self) -> None:
+        """REVISE on an ignored file must be rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "secret.tmp").write_text("old")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, ignore_patterns=["*.tmp"]))
+            await backend.connect()
+
+            intent = ReviseIntent(
+                intent_class="REVISE",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.EQ, value="secret.tmp")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+                payload={"content": "new"},
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="ignore pattern"):
+                    await backend.execute(intent)
 
 
 # =============================================================================
