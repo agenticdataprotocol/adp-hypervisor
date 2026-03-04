@@ -13,7 +13,12 @@ from adp_hypervisor.handlers.describe import (
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.policy import MandatoryFilterPolicy
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
-from adp_hypervisor.protocol.errors import InvalidParamsError, ResourceNotFoundError
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
+from adp_hypervisor.protocol.errors import (
+    InvalidParamsError,
+    ResourceNotFoundError,
+    UnauthorizedError,
+)
 from adp_hypervisor.protocol.types import (
     Field,
     FieldType,
@@ -57,6 +62,13 @@ def _mock_manifest(
     index.get_resource.return_value = resource
     index.get_mandatory_filter_policies.return_value = mandatory_filters or []
     return index
+
+
+def _mock_policy_enforcer() -> PolicyEnforcer:
+    enforcer = MagicMock(spec=PolicyEnforcer)
+    enforcer.resolve_role.return_value = "default"
+    enforcer.check_access.return_value = None
+    return enforcer
 
 
 def _make_params(
@@ -224,7 +236,9 @@ class TestBuildWriteCapabilities(unittest.TestCase):
 
 class TestDescribeHandlerMethod(unittest.TestCase):
     def test_method_name(self) -> None:
-        handler = DescribeHandler(manifest_index=_mock_manifest())
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         self.assertEqual(handler.method, "adp.describe")
 
 
@@ -236,7 +250,10 @@ class TestDescribeHandlerMethod(unittest.TestCase):
 class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
     async def test_returns_describe_result(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -249,7 +266,10 @@ class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
 
     async def test_returns_fields_from_source(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -258,7 +278,10 @@ class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
 
     async def test_read_intent_generates_predicates_and_projections(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -269,7 +292,10 @@ class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
 
     async def test_write_intent_generates_mutables(self) -> None:
         resource = _make_resource(intent_classes=["INGEST"])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="INGEST"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -280,7 +306,10 @@ class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
 
     async def test_revise_generates_mutables(self) -> None:
         resource = _make_resource(intent_classes=["REVISE"])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="REVISE"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -289,7 +318,10 @@ class TestDescribeHandlerBasic(unittest.IsolatedAsyncioTestCase):
 
     async def test_lookup_generates_predicates_and_projections(self) -> None:
         resource = _make_resource(intent_classes=["LOOKUP"])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="LOOKUP"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -307,7 +339,7 @@ class TestDescribeHandlerVersionQuery(unittest.IsolatedAsyncioTestCase):
     async def test_version_passed_to_manifest(self) -> None:
         resource = _make_resource(version=2)
         manifest = _mock_manifest(resource=resource)
-        handler = DescribeHandler(manifest_index=manifest)
+        handler = DescribeHandler(manifest_index=manifest, policy_enforcer=_mock_policy_enforcer())
         await handler.handle(_make_params(version=2))
 
         manifest.get_resource.assert_called_once_with("com.acme:test_resource", version=2)
@@ -315,7 +347,7 @@ class TestDescribeHandlerVersionQuery(unittest.IsolatedAsyncioTestCase):
     async def test_no_version_returns_latest(self) -> None:
         resource = _make_resource(version=3)
         manifest = _mock_manifest(resource=resource)
-        handler = DescribeHandler(manifest_index=manifest)
+        handler = DescribeHandler(manifest_index=manifest, policy_enforcer=_mock_policy_enforcer())
         result = await handler.handle(_make_params())
 
         manifest.get_resource.assert_called_once_with("com.acme:test_resource", version=None)
@@ -330,12 +362,16 @@ class TestDescribeHandlerVersionQuery(unittest.IsolatedAsyncioTestCase):
 
 class TestDescribeHandlerResourceNotFound(unittest.IsolatedAsyncioTestCase):
     async def test_resource_not_found_raises(self) -> None:
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=None))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=None), policy_enforcer=_mock_policy_enforcer()
+        )
         with self.assertRaisesRegex(ResourceNotFoundError, "Resource not found"):
             await handler.handle(_make_params(resource_id="nonexistent:resource"))
 
     async def test_version_not_found_raises(self) -> None:
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=None))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=None), policy_enforcer=_mock_policy_enforcer()
+        )
         with self.assertRaisesRegex(ResourceNotFoundError, "version=99"):
             await handler.handle(_make_params(version=99))
 
@@ -348,19 +384,28 @@ class TestDescribeHandlerResourceNotFound(unittest.IsolatedAsyncioTestCase):
 class TestDescribeHandlerIntentClassValidation(unittest.IsolatedAsyncioTestCase):
     async def test_wildcard_intent_class_rejected(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         with self.assertRaisesRegex(InvalidParamsError, r"WILDCARD.*not allowed"):
             await handler.handle(_make_params(intent_class="*"))
 
     async def test_unsupported_intent_class_rejected(self) -> None:
         resource = _make_resource(intent_classes=["QUERY"])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         with self.assertRaisesRegex(InvalidParamsError, "does not support intent class"):
             await handler.handle(_make_params(intent_class="INGEST"))
 
     async def test_wildcard_resource_accepts_any_intent(self) -> None:
         resource = _make_resource(intent_classes=["*"])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -368,7 +413,10 @@ class TestDescribeHandlerIntentClassValidation(unittest.IsolatedAsyncioTestCase)
 
     async def test_resource_with_empty_intent_classes_rejected(self) -> None:
         resource = _make_resource(intent_classes=[])
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         with self.assertRaisesRegex(InvalidParamsError, "does not declare"):
             await handler.handle(_make_params(intent_class="QUERY"))
 
@@ -386,7 +434,10 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
         """OPERATIONAL policy has no effect on predicate usage (all remain OPTIONAL)."""
         resource = _make_resource()
         # No mandatory filters — only operational policy in this test
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -396,7 +447,10 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_no_policy_all_predicates_optional(self) -> None:
         resource = _make_resource()
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -415,7 +469,8 @@ class TestDescribeHandlerPolicyIntegration(unittest.IsolatedAsyncioTestCase):
             value="v",
         )
         handler = DescribeHandler(
-            manifest_index=_mock_manifest(resource=resource, mandatory_filters=[mf_policy])
+            manifest_index=_mock_manifest(resource=resource, mandatory_filters=[mf_policy]),
+            policy_enforcer=_mock_policy_enforcer(),
         )
         result = await handler.handle(_make_params(intent_class="INGEST"))
 
@@ -439,7 +494,10 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
             backend_id="test",
             source_definition=SourceDefinition(source="empty", fields=[]),
         )
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_params(resource_id="com.acme:empty", intent_class="QUERY")
         )
@@ -455,7 +513,10 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
             backend_id="test",
             source_definition=SourceDefinition(source="empty_table", fields=None),
         )
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_params(resource_id="com.acme:no_fields", intent_class="QUERY")
         )
@@ -466,7 +527,10 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
     async def test_vector_field_gets_similar_operator(self) -> None:
         fields = [Field(field_id="embedding", type=FieldType.VECTOR)]
         resource = _make_resource(fields=fields)
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params(intent_class="QUERY"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -476,8 +540,44 @@ class TestDescribeHandlerEdgeCases(unittest.IsolatedAsyncioTestCase):
     async def test_resource_version_defaults_to_one(self) -> None:
         resource = _make_resource()
         resource.version = None
-        handler = DescribeHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["version"], 1)
+
+
+# =============================================================================
+# Access Enforcement Tests
+# =============================================================================
+
+
+class TestDescribeAccessEnforcement(unittest.IsolatedAsyncioTestCase):
+    async def test_access_denied(self) -> None:
+        """When check_access raises UnauthorizedError, handler propagates it."""
+        resource = _make_resource()
+        enforcer = _mock_policy_enforcer()
+        enforcer.check_access.side_effect = UnauthorizedError("denied")
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource), policy_enforcer=enforcer
+        )
+
+        with self.assertRaises(UnauthorizedError) as ctx:
+            await handler.handle(_make_params())
+        self.assertEqual(ctx.exception.code, -32003)
+
+    async def test_resolve_role_called(self) -> None:
+        """Verify resolve_role is called with the params dict."""
+        resource = _make_resource()
+        enforcer = _mock_policy_enforcer()
+        handler = DescribeHandler(
+            manifest_index=_mock_manifest(resource=resource), policy_enforcer=enforcer
+        )
+        params = _make_params()
+
+        await handler.handle(params)
+
+        enforcer.resolve_role.assert_called_once_with(params)

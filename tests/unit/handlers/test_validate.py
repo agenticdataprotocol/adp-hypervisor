@@ -11,7 +11,8 @@ from adp_hypervisor.handlers.validate import (
 )
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.semantic import CuratedResource, SourceDefinition
-from adp_hypervisor.protocol.errors import ResourceNotFoundError
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
+from adp_hypervisor.protocol.errors import ResourceNotFoundError, UnauthorizedError
 from adp_hypervisor.protocol.types import (
     Field,
     FieldType,
@@ -63,6 +64,13 @@ def _mock_manifest(
     index = MagicMock(spec=ManifestIndex)
     index.get_resource.return_value = resource
     return index
+
+
+def _mock_policy_enforcer() -> PolicyEnforcer:
+    enforcer = MagicMock(spec=PolicyEnforcer)
+    enforcer.resolve_role.return_value = "default"
+    enforcer.check_access.return_value = None
+    return enforcer
 
 
 def _make_query_params(
@@ -218,7 +226,9 @@ class TestGetOperatorsForField(unittest.TestCase):
 
 class TestValidateHandlerMethod(unittest.TestCase):
     def test_method_name(self) -> None:
-        handler = ValidateHandler(manifest_index=_mock_manifest())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
         self.assertEqual(handler.method, "adp.validate")
 
 
@@ -230,7 +240,10 @@ class TestValidateHandlerMethod(unittest.TestCase):
 class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
     async def test_valid_query(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_query_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -239,7 +252,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_lookup(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_lookup_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -248,7 +264,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_ingest(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_ingest_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -257,7 +276,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_revise(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_revise_params())
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -266,7 +288,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_query_with_projections(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_query_params(projections=["id", "name"]))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -275,7 +300,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_query_with_order_by(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(order_by=[{"fieldId": "name", "direction": "ASC"}])
         )
@@ -286,7 +314,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_query_with_limit(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_query_params(limit=10))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -302,7 +333,10 @@ class TestValidateValidIntents(unittest.IsolatedAsyncioTestCase):
 class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
     async def test_query_predicate_unknown_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -321,7 +355,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 
     async def test_lookup_unknown_key_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_lookup_params(key_field="unknown"))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -331,7 +368,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 
     async def test_ingest_unknown_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_ingest_params(payload=[{"id": "1", "unknown_field": "val"}])
         )
@@ -343,7 +383,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 
     async def test_revise_unknown_predicate_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_revise_params(
                 predicates=[
@@ -360,7 +403,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 
     async def test_revise_unknown_payload_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_revise_params(payload={"unknown_col": "updated"}))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -369,7 +415,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 
     async def test_ingest_deduplicates_across_records(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_ingest_params(payload=[{"bad_field": "v1"}, {"bad_field": "v2"}])
         )
@@ -388,7 +437,10 @@ class TestValidateFieldNotFound(unittest.IsolatedAsyncioTestCase):
 class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
     async def test_like_on_boolean_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -406,7 +458,10 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 
     async def test_similar_on_string_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -427,7 +482,10 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 
     async def test_gt_on_boolean_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -444,7 +502,10 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_operator_no_issue(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -460,7 +521,10 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 
     async def test_revise_invalid_operator(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_revise_params(
                 predicates=[
@@ -484,7 +548,10 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 class TestValidateProjections(unittest.IsolatedAsyncioTestCase):
     async def test_query_unknown_projection(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_query_params(projections=["id", "nonexistent"]))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -493,7 +560,10 @@ class TestValidateProjections(unittest.IsolatedAsyncioTestCase):
 
     async def test_lookup_unknown_projection(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(_make_lookup_params(projections=["id", "ghost"]))
 
         data = result.model_dump(by_alias=True, exclude_none=True)
@@ -509,7 +579,10 @@ class TestValidateProjections(unittest.IsolatedAsyncioTestCase):
 class TestValidateOrderBy(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_order_by_field(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(order_by=[{"fieldId": "unknown_sort", "direction": "ASC"}])
         )
@@ -526,7 +599,9 @@ class TestValidateOrderBy(unittest.IsolatedAsyncioTestCase):
 
 class TestValidateResourceNotFound(unittest.IsolatedAsyncioTestCase):
     async def test_raises_resource_not_found(self) -> None:
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=None))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=None), policy_enforcer=_mock_policy_enforcer()
+        )
         with self.assertRaisesRegex(ResourceNotFoundError, "Resource not found"):
             await handler.handle(_make_query_params(resource_id="nonexistent:resource"))
 
@@ -545,7 +620,10 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
             backend_id="test",
             source_definition=SourceDefinition(source="empty_table"),
         )
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 resource_id="com.acme:empty",
@@ -563,7 +641,10 @@ class TestValidateEdgeCases(unittest.IsolatedAsyncioTestCase):
 
     async def test_multiple_issues_collected(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -592,7 +673,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_and_with_two_predicates_valid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -609,7 +693,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_and_with_single_predicate_invalid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
@@ -625,7 +712,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_or_with_two_predicates_valid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -641,7 +731,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_or_with_single_predicate_invalid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
@@ -657,7 +750,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_not_with_single_predicate_valid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[{"fieldId": "name", "op": "EQ", "value": "a"}],
@@ -670,7 +766,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
 
     async def test_not_with_two_predicates_invalid(self) -> None:
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_query_params(
                 predicates=[
@@ -690,7 +789,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
     async def test_not_wrapping_group_valid(self) -> None:
         """NOT (A AND B) is valid."""
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         params: dict[str, Any] = {
             "intent": {
                 "intentClass": "QUERY",
@@ -717,7 +819,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
     async def test_nested_invalid_group_detected(self) -> None:
         """AND with valid top level but nested NOT with 2 operands is invalid."""
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         params: dict[str, Any] = {
             "intent": {
                 "intentClass": "QUERY",
@@ -748,7 +853,10 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
     async def test_revise_logic_operator_validated(self) -> None:
         """REVISE intent also validates predicate group arity."""
         resource = _make_resource()
-        handler = ValidateHandler(manifest_index=_mock_manifest(resource=resource))
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
         result = await handler.handle(
             _make_revise_params(
                 predicates=[{"fieldId": "id", "op": "EQ", "value": "123"}],
@@ -760,3 +868,36 @@ class TestValidateLogicOperatorArity(unittest.IsolatedAsyncioTestCase):
         fmt_issues = [i for i in data["issues"] if i["code"] == "INVALID_FORMAT"]
         self.assertEqual(len(fmt_issues), 1)
         self.assertIn("AND", fmt_issues[0]["message"])
+
+
+# =============================================================================
+# Access Enforcement Tests
+# =============================================================================
+
+
+class TestValidateAccessEnforcement(unittest.IsolatedAsyncioTestCase):
+    async def test_access_denied(self) -> None:
+        """When check_access raises UnauthorizedError, handler propagates it."""
+        resource = _make_resource()
+        enforcer = _mock_policy_enforcer()
+        enforcer.check_access.side_effect = UnauthorizedError("denied")
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource), policy_enforcer=enforcer
+        )
+
+        with self.assertRaises(UnauthorizedError) as ctx:
+            await handler.handle(_make_query_params())
+        self.assertEqual(ctx.exception.code, -32003)
+
+    async def test_resolve_role_called(self) -> None:
+        """Verify resolve_role is called with the params dict."""
+        resource = _make_resource()
+        enforcer = _mock_policy_enforcer()
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource), policy_enforcer=enforcer
+        )
+        params = _make_query_params()
+
+        await handler.handle(params)
+
+        enforcer.resolve_role.assert_called_once_with(params)

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from adp_hypervisor.handlers.base import Handler
 from adp_hypervisor.handlers.validate import ValidateHandler
+from adp_hypervisor.policy.enforcer import PolicyEnforcer
 from adp_hypervisor.protocol.errors import (
     ExecutionFailedError,
     ResourceNotFoundError,
@@ -47,16 +48,19 @@ class ExecuteHandler(Handler):
         self,
         manifest_index: ManifestIndex,
         backend_registry: BackendRegistry,
+        policy_enforcer: PolicyEnforcer,
     ) -> None:
         """Initialize the handler.
 
         Args:
             manifest_index: The manifest index to look up resources.
             backend_registry: The registry to look up backend instances.
+            policy_enforcer: The policy enforcer to check access.
         """
         self._manifest_index = manifest_index
         self._backend_registry = backend_registry
-        self._validate_handler = ValidateHandler(manifest_index)
+        self._policy_enforcer = policy_enforcer
+        self._validate_handler = ValidateHandler(manifest_index, policy_enforcer)
 
     @property
     def method(self) -> str:
