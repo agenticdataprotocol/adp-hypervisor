@@ -95,8 +95,8 @@ class LocalFSBackend(BlobStorageBackend):
         self._root = None
         logger.info("Disconnected local filesystem backend %s", self.backend_id)
 
-    # TODO: offload synchronous filesystem I/O to asyncio.to_thread to avoid
-    # blocking the event loop on large directories or files.
+    # TODO(#57): offload synchronous filesystem I/O to asyncio.to_thread to
+    # avoid blocking the event loop on large directories or files.
     async def execute(self, intent: Intent) -> BackendResult:
         """Execute an intent against the local filesystem.
 
@@ -166,8 +166,8 @@ class LocalFSBackend(BlobStorageBackend):
 
         row = self._build_entry_metadata(target, source_dir)
 
-        # TODO: add configurable max file size limit for content retrieval to
-        # prevent OOM on very large files.
+        # TODO(#58): add configurable max file size limit for content retrieval
+        # to prevent OOM on very large files.
         content_type = row.get("content_type", "")
         data = target.read_bytes()
 
@@ -663,26 +663,44 @@ class LocalFSBackend(BlobStorageBackend):
     def _extract_path_from_predicates(predicates: PredicateGroup | None) -> str | None:
         """Extract the ``path`` value from a predicate group.
 
-        Recursively searches nested groups for a ``path == <value>`` predicate.
+        Recursively searches nested groups for a ``path EQ <value>`` predicate.
+        Unlike ``_pop_path_eq_predicate`` (used by QUERY), this method does not
+        remove the predicate from the group — it only extracts the value.
 
         Args:
             predicates: PredicateGroup from the intent.
 
         Returns:
             The path string, or None if not found.
+
+        Raises:
+            RuntimeError: If more than one ``path`` predicate exists.
         """
         if predicates is None:
             return None
 
-        for pred in predicates.predicates:
-            if isinstance(pred, Predicate) and pred.field_id == "path" and pred.op == "EQ":
-                return str(pred.value)
-            if isinstance(pred, PredicateGroup):
-                result = LocalFSBackend._extract_path_from_predicates(pred)
-                if result is not None:
-                    return result
+        def _collect_path_predicates(group: PredicateGroup) -> list[Predicate]:
+            found: list[Predicate] = []
+            for pred in group.predicates:
+                if isinstance(pred, Predicate) and pred.field_id == "path":
+                    found.append(pred)
+                elif isinstance(pred, PredicateGroup):
+                    found.extend(_collect_path_predicates(pred))
+            return found
 
-        return None
+        path_preds = _collect_path_predicates(predicates)
+
+        if len(path_preds) > 1:
+            raise RuntimeError("Only one 'path' predicate is allowed")
+
+        if not path_preds:
+            return None
+
+        path_pred = path_preds[0]
+        if path_pred.op != PredicateOperator.EQ:
+            return None
+
+        return str(path_pred.value)
 
     @staticmethod
     def _decode_content(item: dict[str, Any]) -> bytes:
