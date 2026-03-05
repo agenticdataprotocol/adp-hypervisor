@@ -24,6 +24,7 @@ from adp_hypervisor.protocol.types import (
     PredicateOperator,
     QueryIntent,
     ReviseIntent,
+    normalize_to_predicate_group,
 )
 from backends.base import BackendResult
 from backends.credentials import CredentialResolutionError, resolve_credential
@@ -135,7 +136,7 @@ class MongoDBBackend(NOSQLBackend):
             return filter_query, projection, None, None
 
         elif isinstance(intent, QueryIntent):
-            filter_query = self._build_query_filter(intent.predicates)
+            filter_query = self._build_query_filter(normalize_to_predicate_group(intent.predicates))
             projection = self._build_projection(intent.projections)
             sort = self._build_sort(intent.order_by)
             limit = intent.limit

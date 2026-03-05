@@ -69,6 +69,7 @@ from adp_hypervisor.protocol.types import (
     PingRequest,
     Predicate,
     PredicateCapability,
+    PredicateExpression,
     PredicateGroup,
     PredicateOperator,
     PredicateUsage,
@@ -92,6 +93,7 @@ from adp_hypervisor.protocol.types import (
     ValidateResult,
     ValidationIssue,
     ValidationIssueCode,
+    normalize_to_predicate_group,
 )
 
 __all__ = [
@@ -138,6 +140,8 @@ __all__ = [
     "Predicate",
     "IdentityPredicate",
     "PredicateGroup",
+    "PredicateExpression",
+    "normalize_to_predicate_group",
     # Initialize Types
     "Implementation",
     "ClientCapabilities",

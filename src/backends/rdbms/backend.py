@@ -22,6 +22,7 @@ from adp_hypervisor.protocol.types import (
     QueryIntent,
     ReviseIntent,
     SortOrder,
+    normalize_to_predicate_group,
 )
 from backends.base import Backend, BackendResult
 
@@ -120,7 +121,8 @@ class RDBMSBackend(Backend):
         params: list[Any] = []
         projections = self._build_select(intent.projections)
         table = self.quote_identifier(source)
-        where = self._build_where(intent.predicates, params)
+        group = normalize_to_predicate_group(intent.predicates)
+        where = self._build_where(group, params)
         sql = f"SELECT {projections} FROM {table}"
         if where:
             sql += f" WHERE {where}"

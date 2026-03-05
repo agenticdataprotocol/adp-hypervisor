@@ -255,6 +255,26 @@ class PredicateGroup(ADPModel):
     )
 
 
+PredicateExpression = Predicate | PredicateGroup
+"""A predicate expression that can be either a single predicate or a group of
+predicates combined with a logic operator.
+
+Use a single :class:`Predicate` for simple, single-condition filters. Use a
+:class:`PredicateGroup` when combining multiple conditions with AND, OR, or NOT.
+"""
+
+
+def normalize_to_predicate_group(expr: PredicateExpression) -> PredicateGroup:
+    """Normalize a PredicateExpression to a PredicateGroup.
+
+    If *expr* is already a :class:`PredicateGroup` it is returned as-is.
+    A bare :class:`Predicate` is wrapped in an ``AND`` group with a single element.
+    """
+    if isinstance(expr, PredicateGroup):
+        return expr
+    return PredicateGroup(op=LogicOperator.AND, predicates=[expr])
+
+
 # =============================================================================
 # Initialization Types
 # =============================================================================
@@ -652,7 +672,13 @@ class QueryIntent(ADPModel):
 
     intent_class: Literal["QUERY"] = PydanticField(default="QUERY", description="Intent class type")
     resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
-    predicates: PredicateGroup = PydanticField(..., description="Predicates for filtering data")
+    predicates: PredicateExpression = PydanticField(
+        ...,
+        description=(
+            "Predicates for filtering data. A single Predicate may be used for simple "
+            "filters; use a PredicateGroup to combine multiple conditions with a logic operator."
+        ),
+    )
     projections: list[str] | None = PydanticField(default=None, description="Fields to project")
     order_by: list[SortOrder] | None = PydanticField(
         default=None, description="Fields to order results by"
@@ -679,8 +705,13 @@ class ReviseIntent(ADPModel):
         default="REVISE", description="Intent class type"
     )
     resource_id: ResourceId = PydanticField(..., description="The resource to operate on")
-    predicates: PredicateGroup = PydanticField(
-        ..., description="Predicates to identify the records to update"
+    predicates: PredicateExpression = PydanticField(
+        ...,
+        description=(
+            "Predicates to identify the records to update. A single Predicate may be used "
+            "for simple filters; use a PredicateGroup to combine multiple conditions with "
+            "a logic operator."
+        ),
     )
     payload: dict[str, Any] = PydanticField(
         ..., description="The data payload containing the fields to update"

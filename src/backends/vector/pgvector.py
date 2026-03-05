@@ -17,6 +17,7 @@ from adp_hypervisor.protocol.types import (
     PredicateGroup,
     PredicateOperator,
     QueryIntent,
+    normalize_to_predicate_group,
 )
 from backends.credentials import CredentialResolutionError, resolve_credential
 from backends.rdbms.backend import RDBMSBackend
@@ -144,16 +145,17 @@ class PgVectorBackend(RDBMSBackend, VectorBackend):
         into an ``ORDER BY <col> <distance_op> <vector>`` clause instead of
         appearing in the ``WHERE`` clause.
         """
-        similar_preds, remaining_group = self._extract_similar(intent.predicates)
+        pred_group = normalize_to_predicate_group(intent.predicates)
+        similar_preds, remaining_group = self._extract_similar(pred_group)
 
         # Reject SIMILAR predicates nested inside sub-groups — only top-level
         # SIMILAR predicates are supported.
-        self._reject_nested_similar(intent.predicates)
+        self._reject_nested_similar(pred_group)
 
         if not similar_preds:
             return super()._build_query_sql(source, intent)
 
-        if intent.predicates.op.value == "OR":
+        if pred_group.op.value == "OR":
             raise ValueError("SIMILAR predicates are not supported inside OR groups")
 
         similar_values = [self._parse_similar_value(p) for p in similar_preds]
