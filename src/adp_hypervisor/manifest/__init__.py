@@ -6,12 +6,12 @@ from adp_hypervisor.manifest.physical import (
     BackendDefinition,
     BackendProvider,
     BackendType,
+    BlobStorageBackendConfig,
     CredentialReference,
     GraphBackendConfig,
     NOSQLBackendConfig,
     PhysicalManifest,
     RDBMSBackendConfig,
-    S3BackendConfig,
     VectorBackendConfig,
 )
 from adp_hypervisor.manifest.policy import (
@@ -48,7 +48,7 @@ __all__ = [
     "CredentialReference",
     "RDBMSBackendConfig",
     "VectorBackendConfig",
-    "S3BackendConfig",
+    "BlobStorageBackendConfig",
     "NOSQLBackendConfig",
     "GraphBackendConfig",
     "BackendDefinition",

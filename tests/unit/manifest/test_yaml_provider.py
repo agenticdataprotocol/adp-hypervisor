@@ -6,8 +6,8 @@ from pathlib import Path
 from adp_hypervisor.manifest.index import ManifestIndex
 from adp_hypervisor.manifest.physical import (
     BackendType,
+    BlobStorageBackendConfig,
     RDBMSBackendConfig,
-    S3BackendConfig,
     VectorBackendConfig,
 )
 from adp_hypervisor.manifest.policy import (
@@ -113,12 +113,12 @@ class TestYamlManifestProviderBackends(unittest.TestCase):
         self.assertIsInstance(backend.config, VectorBackendConfig)
         self.assertEqual(backend.config.index_name, "bank-summaries")
 
-    def test_get_backend_s3(self) -> None:
+    def test_get_backend_blob_storage(self) -> None:
         index = _make_index()
         backend = index.get_backend("raw_storage")
         self.assertIsNotNone(backend)
-        self.assertIsInstance(backend.config, S3BackendConfig)
-        self.assertEqual(backend.config.region, "us-east-1")
+        self.assertIsInstance(backend.config, BlobStorageBackendConfig)
+        self.assertEqual(backend.config.uri, "s3://acme-finance-datalake/")
 
     def test_get_backend_not_found(self) -> None:
         index = _make_index()
