@@ -26,6 +26,7 @@ from adp_hypervisor.protocol.types import (
     PredicateOperator,
     QueryIntent,
     ReviseIntent,
+    normalize_to_predicate_group,
 )
 from backends.base import BackendResult
 from backends.blob_storage.backend import BlobStorageBackend
@@ -201,7 +202,8 @@ class LocalFSBackend(BlobStorageBackend):
         """
         listing_dir = source_dir
 
-        path_value, filter_predicates = self._pop_path_eq_predicate(intent.predicates)
+        pred_group = normalize_to_predicate_group(intent.predicates)
+        path_value, filter_predicates = self._pop_path_eq_predicate(pred_group)
 
         if path_value is not None:
             target = self._resolve_child(source_dir, path_value)
@@ -327,7 +329,9 @@ class LocalFSBackend(BlobStorageBackend):
         Raises:
             RuntimeError: If file not found or payload is invalid.
         """
-        file_path = self._extract_path_from_predicates(intent.predicates)
+        file_path = self._extract_path_from_predicates(
+            normalize_to_predicate_group(intent.predicates)
+        )
         if file_path is None:
             raise RuntimeError(
                 "REVISE requires a predicate with field_id='path' to identify the file"
