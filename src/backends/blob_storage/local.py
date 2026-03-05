@@ -168,13 +168,18 @@ class LocalFSBackend(BlobStorageBackend):
         # TODO: add configurable max file size limit for content retrieval to
         # prevent OOM on very large files.
         content_type = row.get("content_type", "")
-        if _is_binary_content_type(content_type):
-            data = target.read_bytes()
+        data = target.read_bytes()
+
+        if _is_binary_content_type(content_type) or b"\x00" in data:
             row["content"] = base64.b64encode(data).decode("ascii")
             row["content_encoding"] = "base64"
         else:
-            row["content"] = target.read_text(encoding="utf-8", errors="replace")
-            row["content_encoding"] = "utf-8"
+            try:
+                row["content"] = data.decode("utf-8")
+                row["content_encoding"] = "utf-8"
+            except UnicodeDecodeError:
+                row["content"] = base64.b64encode(data).decode("ascii")
+                row["content_encoding"] = "base64"
 
         if intent.projections:
             row = {k: v for k, v in row.items() if k in intent.projections}
@@ -218,9 +223,11 @@ class LocalFSBackend(BlobStorageBackend):
                 raise RuntimeError(f"Path not found: {path_value!r}")
 
         rows: list[dict[str, Any]] = []
+        can_early_stop = intent.limit is not None and not intent.order_by
+        projection_set = set(intent.projections) if intent.projections else None
+        # Defer projections when order_by may reference non-projected fields.
+        apply_projection_early = projection_set is not None and not intent.order_by
 
-        # TODO: for very large directories, consider lazy iteration with
-        # os.scandir and early limit cutoff to reduce memory usage.
         for child in sorted(listing_dir.iterdir(), key=lambda p: p.name):
             if not self._config.allow_symlinks and child.is_symlink():
                 continue
@@ -233,7 +240,13 @@ class LocalFSBackend(BlobStorageBackend):
             if not self._matches_predicates(entry, filter_predicates):
                 continue
 
+            if apply_projection_early:
+                entry = {k: v for k, v in entry.items() if k in projection_set}  # type: ignore[operator]
+
             rows.append(entry)
+
+            if can_early_stop and len(rows) >= intent.limit:  # type: ignore[operator]
+                break
 
         if intent.order_by:
             for sort_order in reversed(intent.order_by):
@@ -244,8 +257,8 @@ class LocalFSBackend(BlobStorageBackend):
         if intent.limit is not None:
             rows = rows[: intent.limit]
 
-        if intent.projections:
-            rows = [{k: v for k, v in row.items() if k in intent.projections} for row in rows]
+        if projection_set is not None and not apply_projection_early:
+            rows = [{k: v for k, v in row.items() if k in projection_set} for row in rows]
 
         return BackendResult(rows=rows)
 
@@ -276,7 +289,12 @@ class LocalFSBackend(BlobStorageBackend):
 
             target = self._resolve_child(source_dir, path_value)
 
-            is_directory = bool(item.get("is_directory", False))
+            raw_is_dir = item.get("is_directory", False)
+            if not isinstance(raw_is_dir, bool):
+                raise RuntimeError(
+                    f"'is_directory' must be a boolean, got {type(raw_is_dir).__name__!r}"
+                )
+            is_directory = raw_is_dir
             if is_directory:
                 try:
                     target.mkdir(parents=True, exist_ok=False)
@@ -712,8 +730,12 @@ def _timestamp_to_iso(ts: float) -> str:
 
 
 def _is_binary_content_type(content_type: str) -> bool:
-    """Heuristic: return True if the MIME type indicates binary data."""
+    """Heuristic: return True if the MIME type indicates binary data.
+
+    Treats ``text/*`` as text and all other non-empty MIME types as binary.
+    Unknown (empty) content types are treated as potentially text so that
+    the byte-level fallback logic can decide.
+    """
     if not content_type:
         return False
-    binary_prefixes = ("image/", "audio/", "video/", "application/octet-stream")
-    return content_type.startswith(binary_prefixes)
+    return not content_type.startswith("text/")

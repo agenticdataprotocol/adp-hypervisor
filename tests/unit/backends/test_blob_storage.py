@@ -250,6 +250,55 @@ class TestLocalFSBackendLookup(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(RuntimeError, msg="field_id must be 'path'"):
                     await backend.execute(intent)
 
+    async def test_lookup_binary_pdf_returns_base64(self) -> None:
+        """LOOKUP a file with application/pdf MIME type must return base64."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "doc.pdf").write_bytes(b"%PDF-1.4 fake pdf content")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="doc.pdf"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 1)
+            self.assertEqual(result.rows[0]["content_encoding"], "base64")
+            decoded = base64.b64decode(result.rows[0]["content"])
+            self.assertEqual(decoded, b"%PDF-1.4 fake pdf content")
+
+    async def test_lookup_non_utf8_falls_back_to_base64(self) -> None:
+        """LOOKUP a file with non-UTF-8 bytes must fall back to base64."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            raw_bytes = b"\x80\x81\x82 not valid utf-8"
+            (source_dir / "data.bin").write_bytes(raw_bytes)
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = LookupIntent(
+                intent_class="LOOKUP",
+                resource_id=_RID,
+                key=IdentityPredicate(field_id="path", op="EQ", value="data.bin"),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 1)
+            self.assertEqual(result.rows[0]["content_encoding"], "base64")
+            decoded = base64.b64decode(result.rows[0]["content"])
+            self.assertEqual(decoded, raw_bytes)
+
 
 # =============================================================================
 # TestLocalFSBackendQuery
@@ -554,6 +603,58 @@ class TestLocalFSBackendQuery(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(result.rows), 1)
             self.assertEqual(result.rows[0]["path"], "big.txt")
 
+    async def test_query_limit_without_order_stops_early(self) -> None:
+        """QUERY with limit and no order_by should stop collecting early."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            for i in range(10):
+                (source_dir / f"file_{i:02d}.txt").write_text(f"content {i}")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(predicates=[], op=LogicOperator.AND),
+                limit=3,
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 3)
+            # Sorted alphabetically, first 3 files
+            self.assertEqual(result.rows[0]["path"], "file_00.txt")
+            self.assertEqual(result.rows[2]["path"], "file_02.txt")
+
+    async def test_query_projections_applied_in_loop(self) -> None:
+        """QUERY projections without order_by should be applied eagerly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "a.txt").write_text("aaa")
+            (source_dir / "b.txt").write_text("bbb")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(predicates=[], op=LogicOperator.AND),
+                projections=["path", "size"],
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            self.assertEqual(len(result.rows), 2)
+            for row in result.rows:
+                self.assertEqual(set(row.keys()), {"path", "size"})
+                self.assertNotIn("content_type", row)
+
 
 # =============================================================================
 # TestLocalFSBackendIngest
@@ -668,6 +769,25 @@ class TestLocalFSBackendIngest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.metadata["affected"], 2)
             self.assertTrue((source_dir / "a.txt").exists())
             self.assertTrue((source_dir / "b.txt").exists())
+
+    async def test_ingest_is_directory_non_bool_raises(self) -> None:
+        """INGEST must reject non-boolean is_directory values."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = IngestIntent(
+                intent_class="INGEST",
+                resource_id=_RID,
+                payload=[{"path": "subdir", "is_directory": "true"}],
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                with self.assertRaises(RuntimeError, msg="'is_directory' must be a boolean"):
+                    await backend.execute(intent)
 
 
 # =============================================================================
