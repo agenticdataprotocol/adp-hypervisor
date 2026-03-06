@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mcp = ["mcp[cli]>=1.0,<2.0", "adp-sdk>=0.1.0"]
 dev = [
     "black>=24.0,<25.0",
     "ruff>=0.2,<1.0",
@@ -36,12 +37,18 @@ dev = [
     "testcontainers[mongodb]>=4.0,<5.0",
 ]
 
+[project.scripts]
+adp-mcp = "adp_mcp.__main__:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv.sources]
+adp-sdk = { path = "/Users/mchades/copilot/adp/python-sdk", editable = true }
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/adp_hypervisor", "src/backends"]
+packages = ["src/adp_hypervisor", "src/backends", "src/adp_mcp"]
 
 [tool.black]
 line-length = 100
@@ -70,7 +77,7 @@ warn_unused_ignores = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*", "yaml.*", "motor.*", "bson.*", "pymongo.*"]
+module = ["asyncpg.*", "yaml.*", "motor.*", "bson.*", "pymongo.*", "mcp.*", "adp_sdk", "adp_sdk.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

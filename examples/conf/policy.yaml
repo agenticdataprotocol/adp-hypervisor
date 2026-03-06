@@ -22,6 +22,12 @@ policies:
     roles:
       - role: "default"
         allowedIntents: ["*"]
+      - role: "admin"
+        allowedIntents: ["*"]
+      - role: "analyst"
+        allowedIntents: ["LOOKUP", "QUERY"]
+      - role: "viewer"
+        allowedIntents: ["LOOKUP", "QUERY"]
 
   # -----------------------------------------------------------------------
   # OPERATIONAL: limit result sets for the orders resource

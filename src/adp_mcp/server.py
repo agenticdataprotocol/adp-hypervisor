@@ -1,0 +1,214 @@
+"""MCP Server module exposing ADP Hypervisor resources as MCP tools.
+
+Uses FastMCP to register four tools (discover, describe, validate, execute)
+that bridge MCP tool calls to the ADP Hypervisor via adp-sdk ClientSession
+over a subprocess stdio transport.
+"""
+
+import json
+import logging
+import os
+import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Annotated, cast
+
+from adp_sdk import ClientSession, IntentClass, basic_auth, stdio_client
+from adp_sdk.shared import ADPError
+from adp_sdk.types.intents import Intent
+from adp_sdk.types.requests import DiscoverFilter
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.shared.exceptions import McpError
+from mcp.types import INTERNAL_ERROR, ErrorData
+from pydantic import Field, TypeAdapter, ValidationError
+
+logger = logging.getLogger(__name__)
+
+_INTENT_ADAPTER: TypeAdapter[Intent] = TypeAdapter(Intent)
+
+_ENV_VAR_USERNAME = "ADP_USERNAME"
+_ENV_VAR_PASSWORD = "ADP_PASSWORD"
+
+
+def _build_authorization() -> str | None:
+    """Build a Basic Auth header from environment variables.
+
+    Reads ADP_USERNAME and ADP_PASSWORD from the environment.
+    Returns None if ADP_USERNAME is not set (anonymous access).
+    """
+    username = os.environ.get(_ENV_VAR_USERNAME)
+    if not username:
+        return None
+    password = os.environ.get(_ENV_VAR_PASSWORD, "")
+    return str(basic_auth(username, password))
+
+
+def create_server(config_path: str) -> FastMCP:
+    """Create and configure the MCP server with ADP bridge tools.
+
+    Args:
+        config_path: Path to the ADP manifest directory.
+
+    Returns:
+        A configured FastMCP instance ready to run.
+    """
+    authorization = _build_authorization()
+
+    @asynccontextmanager
+    async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, ClientSession]]:
+        """Manage ClientSession lifecycle tied to MCP server startup/shutdown.
+
+        Args:
+            server: The FastMCP server instance.
+
+        Yields:
+            A dict containing the initialized ClientSession.
+        """
+        async with stdio_client(
+            sys.executable,
+            args=["-m", "adp_hypervisor", "--config", config_path],
+            authorization=authorization,
+        ) as session:
+            yield {"session": session}
+
+    mcp = FastMCP("adp-mcp-bridge", lifespan=app_lifespan)
+
+    @mcp.tool()  # type: ignore[untyped-decorator]
+    async def adp_discover(
+        domain_prefix: Annotated[
+            str | None, Field(description="Filter by domain prefix, e.g. 'com.acme'.")
+        ] = None,
+        intent_class: Annotated[
+            str | None,
+            Field(description="Filter by intent class: LOOKUP, QUERY, INGEST, or REVISE."),
+        ] = None,
+        keyword: Annotated[
+            str | None, Field(description="Keyword search across resource names and descriptions.")
+        ] = None,
+        cursor: Annotated[
+            str | None, Field(description="Pagination cursor from a previous discover response.")
+        ] = None,
+        ctx: Context = None,
+    ) -> str:
+        """List available ADP resources.
+
+        Use filters to narrow by domain, intent class, or keyword. Returns a JSON object
+        with a 'resources' array (resourceId, supportedIntentClasses, description).
+        Call this first to find a resourceId before using adp_describe or adp_execute.
+        """
+        session: ClientSession = ctx.request_context.lifespan_context["session"]
+        # Normalize empty strings to None so agents passing "" are treated as "no filter".
+        domain_prefix = domain_prefix or None
+        intent_class = intent_class or None
+        keyword = keyword or None
+        filter_obj: DiscoverFilter | None = None
+        if any(p is not None for p in (domain_prefix, intent_class, keyword)):
+            filter_obj = DiscoverFilter(
+                domain_prefix=domain_prefix,
+                intent_class=cast(IntentClass, intent_class) if intent_class else None,
+                keyword=keyword,
+            )
+        try:
+            result = await session.discover(filter=filter_obj, cursor=cursor)
+        except ADPError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+
+    @mcp.tool()  # type: ignore[untyped-decorator]
+    async def adp_describe(
+        resource_id: Annotated[
+            str,
+            Field(
+                description="Resource identifier in 'domain:alias' format, e.g. 'com.acme:users'."
+            ),
+        ],
+        intent_class: Annotated[
+            str, Field(description="Intent class to describe: LOOKUP, QUERY, INGEST, or REVISE.")
+        ],
+        version: Annotated[
+            int | None,
+            Field(description="Resource schema version to describe. Defaults to latest."),
+        ] = None,
+        cursor: Annotated[
+            str | None, Field(description="Pagination cursor for large field lists.")
+        ] = None,
+        ctx: Context = None,
+    ) -> str:
+        """Get the usage contract for an ADP resource and intent class.
+
+        Returns field schema, available predicates, projection options, and mutable fields.
+        Always call this before adp_validate or adp_execute to understand the intent IR shape.
+        """
+        session: ClientSession = ctx.request_context.lifespan_context["session"]
+        try:
+            result = await session.describe(
+                resource_id=resource_id,
+                intent_class=cast(IntentClass, intent_class),
+                version=version,
+                cursor=cursor,
+            )
+        except ADPError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+
+    @mcp.tool()  # type: ignore[untyped-decorator]
+    async def adp_validate(
+        intent: Annotated[
+            dict[str, object],
+            Field(
+                description=(
+                    "Full intent IR object. Must include 'intentClass' "
+                    "(LOOKUP/QUERY/INGEST/REVISE) and 'resourceId'. "
+                    "Build from the usage contract returned by adp_describe."
+                )
+            ),
+        ],
+        ctx: Context = None,
+    ) -> str:
+        """Validate an intent IR against a resource's schema without executing it.
+
+        Returns {valid: bool, issues: [...]} – check before adp_execute to catch errors early.
+        """
+        session: ClientSession = ctx.request_context.lifespan_context["session"]
+        try:
+            intent_obj = _INTENT_ADAPTER.validate_python(intent)
+            result = await session.validate(intent=intent_obj)
+        except ValidationError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        except ADPError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+
+    @mcp.tool()  # type: ignore[untyped-decorator]
+    async def adp_execute(
+        intent: Annotated[
+            dict[str, object],
+            Field(
+                description=(
+                    "Full intent IR object. Must include 'intentClass' "
+                    "(LOOKUP/QUERY/INGEST/REVISE) and 'resourceId'. "
+                    "Build from the usage contract returned by adp_describe."
+                )
+            ),
+        ],
+        cursor: Annotated[
+            str | None, Field(description="Pagination cursor from a previous execute response.")
+        ] = None,
+        ctx: Context = None,
+    ) -> str:
+        """Execute an ADP intent against a resource and return results.
+
+        Use adp_describe to learn the schema, adp_validate to check the intent, then call this.
+        Returns {results: [...], nextCursor?} – pass nextCursor as cursor to page through results.
+        """
+        session: ClientSession = ctx.request_context.lifespan_context["session"]
+        try:
+            intent_obj = _INTENT_ADAPTER.validate_python(intent)
+            result = await session.execute(intent=intent_obj, cursor=cursor)
+        except ValidationError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        except ADPError as e:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
+        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+
+    return mcp
