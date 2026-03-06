@@ -87,3 +87,23 @@ resources:
     sourceDefinition:
       source: "documents"
 
+  - resourceId: "release.gravitino:roles"
+    intentClasses: ["LOOKUP", "QUERY"]
+    version: 1
+    description: "User-role assignments for the Gravitino release process"
+    backendId: "pg_demo"
+    sourceDefinition:
+      source: "user_roles"
+      fields:
+        - fieldId: "id"
+          type: "INTEGER"
+          description: "Unique assignment identifier"
+        - fieldId: "username"
+          type: "STRING"
+          description: "Username"
+        - fieldId: "role"
+          type: "STRING"
+          description: "Assigned role (release_manager, pmc, committer, viewer)"
+        - fieldId: "granted_at"
+          type: "TIMESTAMP"
+          description: "Time the role was granted"
