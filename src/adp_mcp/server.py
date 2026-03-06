@@ -101,6 +101,7 @@ def create_server(config_path: str) -> FastMCP:
         domain_prefix = domain_prefix or None
         intent_class = intent_class or None
         keyword = keyword or None
+        cursor = cursor or None
         filter_obj: DiscoverFilter | None = None
         if any(p is not None for p in (domain_prefix, intent_class, keyword)):
             filter_obj = DiscoverFilter(
@@ -140,6 +141,7 @@ def create_server(config_path: str) -> FastMCP:
         Always call this before adp_validate or adp_execute to understand the intent IR shape.
         """
         session: ClientSession = ctx.request_context.lifespan_context["session"]
+        cursor = cursor or None
         try:
             result = await session.describe(
                 resource_id=resource_id,
@@ -202,6 +204,7 @@ def create_server(config_path: str) -> FastMCP:
         Returns {results: [...], nextCursor?} – pass nextCursor as cursor to page through results.
         """
         session: ClientSession = ctx.request_context.lifespan_context["session"]
+        cursor = cursor or None
         try:
             intent_obj = _INTENT_ADAPTER.validate_python(intent)
             result = await session.execute(intent=intent_obj, cursor=cursor)
