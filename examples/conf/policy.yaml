@@ -24,8 +24,8 @@ policies:
         allowedIntents: ["*"]
       - role: "admin"
         allowedIntents: ["*"]
-      - role: "analyst"
-        allowedIntents: ["LOOKUP", "QUERY"]
+      - role: "release_manager"
+        allowedIntents: ["*"]
       - role: "viewer"
         allowedIntents: ["LOOKUP", "QUERY"]
 
