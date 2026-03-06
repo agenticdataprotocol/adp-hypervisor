@@ -28,6 +28,7 @@ from adp_hypervisor.protocol.types import (
 
 if TYPE_CHECKING:
     from adp_hypervisor.manifest.index import ManifestIndex
+    from adp_hypervisor.manifest.physical import BackendDefinition
     from adp_hypervisor.manifest.semantic import CuratedResource
 
 logger = logging.getLogger(__name__)
@@ -71,15 +72,22 @@ def _expand_intent_classes(intent_classes: list[IntentClass] | None) -> list[Int
     return intent_classes
 
 
-def _to_resource(curated: CuratedResource) -> Resource:
-    """Convert a CuratedResource to a protocol Resource (strip curation-specific fields)."""
+def _to_resource(curated: CuratedResource, backend: BackendDefinition | None = None) -> Resource:
+    """Convert a CuratedResource to a protocol Resource (strip curation-specific fields).
+
+    If a backend definition is provided, a ``"backend:<TYPE>"`` tag is appended
+    so that clients can identify the backend type without a separate describe call.
+    """
+    tags = list(curated.tags or [])
+    if backend is not None:
+        tags.append(f"backend:{backend.type}")
     return Resource(
         resource_id=curated.resource_id,
         version=curated.version,
         intent_classes=_expand_intent_classes(curated.intent_classes),
         description=curated.description,
         semantic_description=curated.semantic_description,
-        tags=curated.tags,
+        tags=tags if tags else None,
     )
 
 
@@ -209,6 +217,8 @@ class DiscoverHandler(Handler):
         )
 
         return DiscoverResult(
-            resources=[_to_resource(r) for r in page],
+            resources=[
+                _to_resource(r, self._manifest_index.get_backend(r.backend_id)) for r in page
+            ],
             next_cursor=next_cursor,
         )

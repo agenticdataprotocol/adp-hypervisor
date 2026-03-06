@@ -81,6 +81,7 @@ _SAMPLE_RESOURCES = [
 def _mock_manifest(resources: list[CuratedResource] | None = None) -> ManifestIndex:
     index = MagicMock(spec=ManifestIndex)
     index.list_resources.return_value = resources if resources is not None else _SAMPLE_RESOURCES
+    index.get_backend.return_value = None
     return index
 
 
@@ -605,3 +606,59 @@ class TestDiscoverAccessFiltering(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
 
         self.assertEqual(data["resources"], [])
+
+
+# =============================================================================
+class TestDiscoverBackendTagInjection(unittest.IsolatedAsyncioTestCase):
+    """Backend type tag is injected into resource tags during discover."""
+
+    async def test_backend_tag_appended(self) -> None:
+        """Resources get a 'backend:<TYPE>' tag from the backend definition."""
+        from unittest.mock import MagicMock
+
+        from adp_hypervisor.manifest.physical import BackendDefinition, BackendType
+
+        backend_def = MagicMock(spec=BackendDefinition)
+        backend_def.type = BackendType.RDBMS
+
+        index = _mock_manifest(
+            [_make_resource("demo:orders", intent_classes=["QUERY"], tags=["FINANCE"])]
+        )
+        index.get_backend.return_value = backend_def
+
+        handler = DiscoverHandler(manifest_index=index, policy_enforcer=_mock_policy_enforcer())
+        result = await handler.handle(_make_params())
+        data = result.model_dump(by_alias=True, exclude_none=True)
+
+        tags = data["resources"][0]["tags"]
+        self.assertIn("FINANCE", tags)
+        self.assertIn("backend:RDBMS", tags)
+
+    async def test_backend_tag_no_existing_tags(self) -> None:
+        """Backend tag is injected even when the resource has no existing tags."""
+        from unittest.mock import MagicMock
+
+        from adp_hypervisor.manifest.physical import BackendDefinition, BackendType
+
+        backend_def = MagicMock(spec=BackendDefinition)
+        backend_def.type = BackendType.BLOB_STORAGE
+
+        index = _mock_manifest([_make_resource("demo:docs", intent_classes=["QUERY"])])
+        index.get_backend.return_value = backend_def
+
+        handler = DiscoverHandler(manifest_index=index, policy_enforcer=_mock_policy_enforcer())
+        result = await handler.handle(_make_params())
+        data = result.model_dump(by_alias=True, exclude_none=True)
+
+        self.assertEqual(data["resources"][0]["tags"], ["backend:BLOB_STORAGE"])
+
+    async def test_no_backend_tag_when_backend_missing(self) -> None:
+        """When get_backend returns None, no backend tag is injected."""
+        index = _mock_manifest([_make_resource("demo:orphan", intent_classes=["QUERY"])])
+        index.get_backend.return_value = None
+
+        handler = DiscoverHandler(manifest_index=index, policy_enforcer=_mock_policy_enforcer())
+        result = await handler.handle(_make_params())
+        data = result.model_dump(by_alias=True, exclude_none=True)
+
+        self.assertNotIn("tags", data["resources"][0])
