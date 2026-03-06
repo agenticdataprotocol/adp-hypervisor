@@ -47,6 +47,9 @@ htmlcov/
 # Linting
 .ruff_cache/
 
+# Logs
+*.log
+
 # Local development
 *.local
 .env

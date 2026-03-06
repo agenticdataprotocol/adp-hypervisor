@@ -52,15 +52,41 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=_VALID_TRANSPORTS,
         help="Transport type (default: stdio)",
     )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help=(
+            "Path to log file. Defaults to '<config-dir>/hypervisor.log'. "
+            "Set to 'stderr' to write logs to stderr instead."
+        ),
+    )
     return parser
 
 
-def _configure_logging(level: str) -> None:
-    """Configure root logging with a consistent format."""
+_DEFAULT_LOG_FILENAME = "hypervisor.log"
+
+
+def _configure_logging(level: str, log_file: str | None, config_dir: Path) -> None:
+    """Configure root logging with a consistent format.
+
+    Args:
+        level: Logging level string (DEBUG, INFO, etc.).
+        log_file: Explicit log file path, 'stderr' for stderr, or None
+            for the default ``<config-dir>/hypervisor.log``.
+        config_dir: Path to the config directory, used to derive the
+            default log file location.
+    """
+    if log_file == "stderr":
+        handler: logging.Handler = logging.StreamHandler(sys.stderr)
+    else:
+        log_path = Path(log_file) if log_file else config_dir / _DEFAULT_LOG_FILENAME
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(log_path)
+
     logging.basicConfig(
         level=getattr(logging, level),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stderr,
+        handlers=[handler],
     )
 
 
@@ -147,7 +173,7 @@ def main(args: list[str] | None = None) -> None:
     parser = _build_parser()
     parsed = parser.parse_args(args)
 
-    _configure_logging(parsed.log_level)
+    _configure_logging(parsed.log_level, parsed.log_file, Path(parsed.config))
 
     if parsed.transport == "http":
         logger.error("HTTP transport is not yet implemented")

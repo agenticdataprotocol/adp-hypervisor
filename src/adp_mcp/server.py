@@ -109,11 +109,21 @@ def create_server(config_path: str) -> FastMCP:
                 intent_class=cast(IntentClass, intent_class) if intent_class else None,
                 keyword=keyword,
             )
+        logger.debug(
+            "adp_discover called: domain_prefix=%r, intent_class=%r, keyword=%r, cursor=%r",
+            domain_prefix,
+            intent_class,
+            keyword,
+            cursor,
+        )
         try:
             result = await session.discover(filter=filter_obj, cursor=cursor)
         except ADPError as e:
+            logger.error("adp_discover failed: %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
-        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        payload = json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        logger.debug("adp_discover returned %d resources", len(result.resources))
+        return payload
 
     @mcp.tool()  # type: ignore[untyped-decorator]
     async def adp_describe(
@@ -142,6 +152,13 @@ def create_server(config_path: str) -> FastMCP:
         """
         session: ClientSession = ctx.request_context.lifespan_context["session"]
         cursor = cursor or None
+        logger.debug(
+            "adp_describe called: resource_id=%r, intent_class=%r, version=%r, cursor=%r",
+            resource_id,
+            intent_class,
+            version,
+            cursor,
+        )
         try:
             result = await session.describe(
                 resource_id=resource_id,
@@ -150,8 +167,11 @@ def create_server(config_path: str) -> FastMCP:
                 cursor=cursor,
             )
         except ADPError as e:
+            logger.error("adp_describe failed: %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
-        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        payload = json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        logger.debug("adp_describe returned for %s/%s", resource_id, intent_class)
+        return payload
 
     @mcp.tool()  # type: ignore[untyped-decorator]
     async def adp_validate(
@@ -172,14 +192,19 @@ def create_server(config_path: str) -> FastMCP:
         Returns {valid: bool, issues: [...]} – check before adp_execute to catch errors early.
         """
         session: ClientSession = ctx.request_context.lifespan_context["session"]
+        logger.debug("adp_validate called: intent=%r", intent)
         try:
             intent_obj = _INTENT_ADAPTER.validate_python(intent)
             result = await session.validate(intent=intent_obj)
         except ValidationError as e:
+            logger.error("adp_validate failed (validation): %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
         except ADPError as e:
+            logger.error("adp_validate failed: %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
-        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        payload = json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        logger.debug("adp_validate returned: valid=%s", result.valid)
+        return payload
 
     @mcp.tool()  # type: ignore[untyped-decorator]
     async def adp_execute(
@@ -205,13 +230,18 @@ def create_server(config_path: str) -> FastMCP:
         """
         session: ClientSession = ctx.request_context.lifespan_context["session"]
         cursor = cursor or None
+        logger.debug("adp_execute called: intent=%r, cursor=%r", intent, cursor)
         try:
             intent_obj = _INTENT_ADAPTER.validate_python(intent)
             result = await session.execute(intent=intent_obj, cursor=cursor)
         except ValidationError as e:
+            logger.error("adp_execute failed (validation): %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
         except ADPError as e:
+            logger.error("adp_execute failed: %s", e, exc_info=True)
             raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e))) from e
-        return json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        payload = json.dumps(result.model_dump(by_alias=True, exclude_none=True), indent=2)
+        logger.debug("adp_execute returned %d results", len(result.results))
+        return payload
 
     return mcp
