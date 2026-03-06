@@ -1,0 +1,7 @@
+key_id: A1B2C3D4E5F6A7B8
+fingerprint: A1B2 C3D4 E5F6 A7B8 9012 3456 7890 ABCD EF01 2345
+owner: alice@apache.org
+algorithm: RSA4096
+created: 2024-01-15
+expires: 2027-01-15
+keyserver: keys.openpgp.org

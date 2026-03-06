@@ -30,6 +30,16 @@ policies:
         allowedIntents: ["LOOKUP", "QUERY"]
 
   # -----------------------------------------------------------------------
+  # ACCESS: release credentials — release_manager only (exact match wins
+  # over the catch-all "*" above due to higher selector specificity).
+  # -----------------------------------------------------------------------
+  - type: "ACCESS"
+    resourceSelector: "release.gravitino:credentials"
+    roles:
+      - role: "release_manager"
+        allowedIntents: ["*"]
+
+  # -----------------------------------------------------------------------
   # OPERATIONAL: limit result sets for the orders resource
   # -----------------------------------------------------------------------
   - type: "OPERATIONAL"

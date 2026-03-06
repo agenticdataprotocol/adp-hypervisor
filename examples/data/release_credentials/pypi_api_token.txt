@@ -1,0 +1,4 @@
+token: pypi-AgEIcHlwaS5vcmcCJDExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMQACKlsidXNlcm5hbWUiLCAiYWxpY2UiXQAABiC_EXAMPLE_TOKEN_DO_NOT_USE
+scope: project:gravitino
+created: 2025-01-01
+note: Used for publishing gravitino Python packages to PyPI

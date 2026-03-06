@@ -87,6 +87,14 @@ resources:
     sourceDefinition:
       source: "documents"
 
+  - resourceId: "release.gravitino:credentials"
+    intentClasses: ["LOOKUP", "QUERY", "INGEST", "REVISE"]
+    version: 1
+    description: "Release credentials (GPG keys, PyPI tokens) — release_manager only"
+    backendId: "local_fs"
+    sourceDefinition:
+      source: "release_credentials"
+
   - resourceId: "release.gravitino:roles"
     intentClasses: ["LOOKUP", "QUERY"]
     version: 1
