@@ -78,3 +78,12 @@ resources:
         - fieldId: "ordered_at"
           type: "TIMESTAMP"
           description: "Time the order was placed"
+
+  - resourceId: "demo:documents"
+    intentClasses: ["LOOKUP", "QUERY", "INGEST", "REVISE"]
+    version: 1
+    description: "Shared documents and reports"
+    backendId: "local_fs"
+    sourceDefinition:
+      source: "documents"
+

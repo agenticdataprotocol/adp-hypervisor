@@ -11,3 +11,10 @@ backends:
     credentials:
       type: "env"
       key: "PG_PASSWORD"
+
+  - id: "local_fs"
+    type: "BLOB_STORAGE"
+    provider: "local"
+    config:
+      type: "BLOB_STORAGE"
+      uri: "examples/data"
