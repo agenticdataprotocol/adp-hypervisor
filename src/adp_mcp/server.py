@@ -11,6 +11,7 @@ import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, cast
 
 from adp_sdk import ClientSession, IntentClass, basic_auth, stdio_client
@@ -43,16 +44,24 @@ def _build_authorization() -> str | None:
     return str(basic_auth(username, password))
 
 
-def create_server(config_path: str) -> FastMCP:
+def create_server(config_path: str, log_dir: str | None = None) -> FastMCP:
     """Create and configure the MCP server with ADP bridge tools.
 
     Args:
         config_path: Path to the ADP manifest directory.
+        log_dir: Directory for log files. When set, the Hypervisor subprocess
+            writes its log to ``<log_dir>/hypervisor.log``. Otherwise the
+            Hypervisor uses its own default (``<config-dir>/hypervisor.log``).
 
     Returns:
         A configured FastMCP instance ready to run.
     """
     authorization = _build_authorization()
+
+    hypervisor_args = ["-m", "adp_hypervisor", "--config", config_path]
+    if log_dir:
+        hypervisor_log = str(Path(log_dir) / "hypervisor.log")
+        hypervisor_args += ["--log-file", hypervisor_log]
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[dict[str, ClientSession]]:
@@ -66,7 +75,7 @@ def create_server(config_path: str) -> FastMCP:
         """
         async with stdio_client(
             sys.executable,
-            args=["-m", "adp_hypervisor", "--config", config_path],
+            args=hypervisor_args,
             authorization=authorization,
         ) as session:
             yield {"session": session}

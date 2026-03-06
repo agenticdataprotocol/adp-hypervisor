@@ -35,6 +35,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    log_dir: str | None = None
     if args.log_file == "stderr":
         handler: logging.Handler = logging.StreamHandler()
     else:
@@ -43,6 +44,7 @@ def main() -> None:
         )
         log_path.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(log_path)
+        log_dir = str(log_path.parent)
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
@@ -50,7 +52,7 @@ def main() -> None:
         handlers=[handler],
     )
 
-    server = create_server(args.config)
+    server = create_server(args.config, log_dir=log_dir)
     server.run(transport="stdio")
 
 
