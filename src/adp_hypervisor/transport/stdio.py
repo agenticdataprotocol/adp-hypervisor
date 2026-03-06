@@ -112,7 +112,7 @@ class StdioTransport(Transport):
                 if not message:
                     continue
 
-                logger.debug("Received message: %s", message[:200])
+                logger.info("Received request: %s", message)
                 yield message
 
             except asyncio.CancelledError:
@@ -135,4 +135,4 @@ class StdioTransport(Transport):
         data = message.rstrip("\n") + "\n"
         self._stdout.write(data.encode("utf-8"))
         await self._stdout.drain()
-        logger.debug("Sent message: %s", message[:200])
+        logger.info("Sent response: %s", message)
