@@ -26,17 +26,24 @@ examples/
 ├── conf/                   # ADP manifest files (all backends)
 │   ├── physical.yaml
 │   ├── semantic.yaml
-│   └── policy.yaml
-└── postgres/               # Docker init for PostgreSQL
-    └── init/
-        └── 01-init.sql
+│   ├── policy.yaml
+│   └── users.yaml
+├── data/                   # Blob storage data (LocalFS backend)
+│   └── documents/
+├── postgres/               # Docker init for PostgreSQL
+│   └── init/
+│       ├── 01-init.sql     # e-commerce schema + seed data
+│       └── 02-user-roles.sql  # Gravitino release roles
+└── skills/
+    └── adp-data-hypervisor/  # Agent skill for Copilot / Goose
 ```
 
 ## Available Backends
 
-| Backend    | Service    | Status        | Init Directory |
-|:-----------|:-----------|:--------------|:---------------|
-| PostgreSQL | `postgres` | ✅ Implemented | `postgres/`    |
+| Backend         | Service    | Status         | Init Directory |
+|:----------------|:-----------|:---------------|:---------------|
+| PostgreSQL      | `postgres` | ✅ Implemented  | `postgres/`    |
+| LocalFS (Blobs) | —          | ✅ Implemented  | `data/`        |
 
 ## Quick Start
 
@@ -78,8 +85,11 @@ Expected: the response contains `serverInfo` with `name: "adp-hypervisor"` and
 {"jsonrpc":"2.0","id":2,"method":"adp.discover","params":{}}
 ```
 
-Expected: `resources` array with three entries — `demo:customers`,
-`demo:products`, and `demo:orders`.
+Expected: `resources` array with five entries — `demo:customers`,
+`demo:products`, `demo:orders`, `demo:documents`, and
+`release.gravitino:roles`. Each resource includes a `tags` field
+containing `"backend:RDBMS"` or `"backend:BLOB_STORAGE"` to indicate
+the underlying backend type.
 
 #### Describe — Inspect a Resource Contract
 
@@ -124,10 +134,29 @@ docker compose down
 
 ## Sample Data (PostgreSQL)
 
-The `postgres/init/01-init.sql` script creates an `adp_demo` database with:
+The `postgres/init/` scripts create an `adp_demo` database with:
 
-| Table       | Rows | Description            |
-|:------------|:-----|:-----------------------|
-| `customers` | 5    | Customer profiles      |
-| `products`  | 6    | Product catalog        |
-| `orders`    | 10   | Customer order records |
+| Table        | Rows | Description                     |
+|:-------------|:-----|:--------------------------------|
+| `customers`  | 5    | Customer profiles               |
+| `products`   | 6    | Product catalog                 |
+| `orders`     | 10   | Customer order records          |
+| `user_roles` | 6    | Gravitino release role assignments |
+
+## Agent Skill (Copilot / Goose)
+
+The `skills/adp-data-hypervisor/` directory contains a reusable agent
+skill that teaches Copilot CLI and Goose how to interact with ADP
+Hypervisor resources via the `adp_mcp` MCP bridge.
+
+To use the skill in **VS Code Copilot**, add the following to your
+`.vscode/settings.json` (create the file if it doesn't exist):
+
+```json
+{
+  "chat.agentSkillsLocations": ["examples/skills"]
+}
+```
+
+The skill is then available as `/adp-data-hypervisor` in the Copilot
+Chat panel and is automatically loaded when you ask about ADP resources.
