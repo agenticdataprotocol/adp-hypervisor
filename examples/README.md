@@ -22,11 +22,14 @@ uv sync
 
 ```
 examples/
-├── docker-compose.yml      # Backend infrastructure (Postgres, …)
+├── docker-compose.yml      # Backend infrastructure (Postgres, MongoDB, …)
 ├── conf/                   # ADP manifest files (all backends)
 │   ├── physical.yaml
 │   ├── semantic.yaml
 │   └── policy.yaml
+├── mongodb/                # Docker init for MongoDB
+│   └── init/
+│       └── 01-init.js
 ├── postgres/               # Docker init for PostgreSQL
 │   └── init/
 │       └── 01-init.sql
@@ -41,6 +44,7 @@ examples/
 |:-----------|:-----------|:--------------|:---------------|
 | PostgreSQL | `postgres` | ✅ Implemented | `postgres/`    |
 | pgvector   | `pgvector` | ✅ Implemented | `pgvector/`    |
+| MongoDB    | `mongodb`  | ✅ Implemented | `mongodb/`     |
 
 ## Quick Start
 
@@ -57,8 +61,12 @@ Open a **new terminal** at the repository root:
 
 ```bash
 export PG_PASSWORD=adp_pass
+export MONGO_PASSWORD=adp_pass
 uv run python -m adp_hypervisor --config examples/conf
 ```
+
+The MongoDB service uses admin credentials only for this local demo. Use a
+scoped application user instead for non-demo environments.
 
 The server listens on **stdin** for JSON-RPC requests and writes responses
 to stdout. Keep this terminal open.
@@ -86,8 +94,8 @@ the demo `default` role.
 {"jsonrpc":"2.0","id":2,"method":"adp.discover","params":{"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
 ```
 
-Expected: `resources` array with four entries — `demo:customers`,
-`demo:products`, `demo:orders`, and `demo:items`.
+Expected: `resources` array with five entries — `demo:customers`,
+`demo:products`, `demo:orders`, `demo:items`, and `demo:user_profiles`.
 
 #### Describe — Inspect a Resource Contract
 
@@ -123,13 +131,34 @@ Expected: `results` contains a single row for Alice Johnson.
 Expected: `results` contains the four shipped orders with IDs `9`, `6`,
 `3`, and `1`, sorted by `ordered_at` descending.
 
+#### Execute LOOKUP — Fetch a MongoDB User Profile
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"adp.execute","params":{"intent":{"intentClass":"LOOKUP","resourceId":"demo:user_profiles","key":{"fieldId":"user_id","op":"EQ","value":"usr_001"},"projections":["user_id","name","email","segment","status","login_count"]},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
+```
+
+Expected: `results` contains a single row for Alicia Chen in the `enterprise`
+segment with `login_count` `42`.
+
+#### Execute QUERY — Search MongoDB User Profiles
+
+Find active enterprise users with more than 20 successful logins, ordered by
+their login counts:
+
+```json
+{"jsonrpc":"2.0","id":8,"method":"adp.execute","params":{"intent":{"intentClass":"QUERY","resourceId":"demo:user_profiles","predicates":{"op":"AND","predicates":[{"fieldId":"segment","op":"EQ","value":"enterprise"},{"fieldId":"status","op":"EQ","value":"active"},{"fieldId":"login_count","op":"GT","value":20}]},"projections":["user_id","name","segment","status","login_count"],"orderBy":[{"fieldId":"login_count","direction":"DESC"}],"limit":3},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
+```
+
+Expected: `results` contains Alicia Chen and Nia Patel, sorted by
+`login_count` descending.
+
 #### Execute QUERY with SIMILAR — Vector Similarity Search (pgvector)
 
 Find items most similar to a "tech + office" query vector using cosine
 distance, priced under $50, returning the top 5 results:
 
 ```json
-{"jsonrpc":"2.0","id":7,"method":"adp.execute","params":{"intent":{"intentClass":"QUERY","resourceId":"demo:items","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"vector":[0.9,0.8,0.1],"top":5,"distance_function":"COSINE"}},{"fieldId":"price","op":"LT","value":50}]},"projections":["id","title","category","price"]},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
+{"jsonrpc":"2.0","id":9,"method":"adp.execute","params":{"intent":{"intentClass":"QUERY","resourceId":"demo:items","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"vector":[0.9,0.8,0.1],"top":5,"distance_function":"COSINE"}},{"fieldId":"price","op":"LT","value":50}]},"projections":["id","title","category","price"]},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
 ```
 
 Expected: items with `price < 50` ranked by cosine similarity to
@@ -142,7 +171,7 @@ Find items similar to a "home + office" vector, but only in the "Furniture"
 category:
 
 ```json
-{"jsonrpc":"2.0","id":8,"method":"adp.execute","params":{"intent":{"intentClass":"QUERY","resourceId":"demo:items","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"vector":[0.1,0.7,0.9],"top":3,"distance_function":"COSINE"}},{"fieldId":"category","op":"EQ","value":"Furniture"}]},"projections":["id","title","category","price"]},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
+{"jsonrpc":"2.0","id":10,"method":"adp.execute","params":{"intent":{"intentClass":"QUERY","resourceId":"demo:items","predicates":{"op":"AND","predicates":[{"fieldId":"embedding","op":"SIMILAR","value":{"vector":[0.1,0.7,0.9],"top":3,"distance_function":"COSINE"}},{"fieldId":"category","op":"EQ","value":"Furniture"}]},"projections":["id","title","category","price"]},"_meta":{"authorization":"Basic dGVzdHVzZXI6"}}}
 ```
 
 Expected: only Furniture items ranked by similarity to the query vector:
@@ -177,3 +206,12 @@ with the `vector` extension enabled:
 Each item has a 3-dimensional embedding vector that encodes a simplified
 semantic representation. Real-world embeddings would come from a model
 like `text-embedding-3-small` and have hundreds of dimensions.
+
+## Sample Data (MongoDB)
+
+The `mongodb/init/01-init.js` script creates an `adp_mongo_demo` database and
+seeds a `users` collection:
+
+| Collection | Documents | Description |
+|:-----------|:----------|:------------|
+| `users`    | 5         | Application user profiles with segment, status, and login activity |
