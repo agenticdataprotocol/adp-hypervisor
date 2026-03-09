@@ -158,7 +158,7 @@ adp-hypervisor/
 ├── src/adp_hypervisor/         # Main hypervisor package
 │   ├── server.py               # ADPServer main class
 │   ├── __main__.py             # CLI entry point
-│   ├── transport/              # Transport layer (stdio, HTTP)
+│   ├── transport/              # Transport layer (stdio; HTTP planned)
 │   ├── protocol/               # JSON-RPC types, errors, dispatcher
 │   ├── handlers/               # ADP method handlers
 │   ├── manifest/               # Manifest models and providers
