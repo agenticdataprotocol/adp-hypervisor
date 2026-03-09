@@ -15,3 +15,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  pgvector:
+    image: pgvector/pgvector:pg15
+    container_name: adp-demo-pgvector
+    environment:
+      POSTGRES_USER: adp_user
+      POSTGRES_PASSWORD: adp_pass
+      POSTGRES_DB: adp_vector_demo
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./pgvector/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adp_user -d adp_vector_demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
