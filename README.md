@@ -31,7 +31,7 @@ cd adp-hypervisor
 uv sync
 
 # Install with development dependencies
-uv sync --all-extras
+uv sync --extra dev
 ```
 
 ### Using pip
@@ -90,8 +90,15 @@ echo '{"jsonrpc":"2.0","id":1,"method":"adp.initialize","params":{"protocolVersi
 ```python
 import asyncio
 from adp_hypervisor import ADPServer
+from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
+from pathlib import Path
 
-server = ADPServer(config_dir="my-config")
+provider = YamlManifestProvider(
+    physical_path=Path("my-config/physical.yaml"),
+    semantic_path=Path("my-config/semantic.yaml"),
+    policy_path=Path("my-config/policy.yaml"),
+)
+server = ADPServer(manifest_provider=provider)
 asyncio.run(server.run())
 ```
 
@@ -101,11 +108,12 @@ The [examples](examples/) directory contains a ready-to-run demo with Docker Com
 infrastructure and pre-configured manifests. See [examples/README.md](examples/README.md) for the
 full walkthrough.
 
-| Backend    | Status         | Description                                                                       |
-|:-----------|:---------------|:----------------------------------------------------------------------------------|
-| PostgreSQL | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents    |
-| pgvector   | ✅ Implemented  | Vector similarity search demo with embedded product catalog items                 |
-| MongoDB    | ✅ Implemented  | User profile collection with LOOKUP and QUERY intents in the shared examples demo |
+| Backend          | Status         | Description                                                                       |
+|:-----------------|:---------------|:----------------------------------------------------------------------------------|
+| PostgreSQL       | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents    |
+| pgvector         | ✅ Implemented  | Vector similarity search demo with embedded product catalog items                 |
+| MongoDB          | ✅ Implemented  | User profile collection with LOOKUP and QUERY intents in the shared examples demo |
+| Local Filesystem | ✅ Implemented  | Invoice files organised by fulfilment status; supports LOOKUP, QUERY, INGEST, REVISE (no Docker required) |
 
 ## Development
 
@@ -150,10 +158,11 @@ adp-hypervisor/
 ├── src/adp_hypervisor/         # Main hypervisor package
 │   ├── server.py               # ADPServer main class
 │   ├── __main__.py             # CLI entry point
-│   ├── transport/              # Transport layer (stdio, HTTP)
+│   ├── transport/              # Transport layer (stdio; HTTP planned)
 │   ├── protocol/               # JSON-RPC types, errors, dispatcher
 │   ├── handlers/               # ADP method handlers
-│   └── manifest/               # Manifest models and providers
+│   ├── manifest/               # Manifest models and providers
+│   └── policy/                 # ACCESS policy enforcement and RBAC
 ├── src/backends/               # Backend implementations (RDBMS, etc.)
 └── tests/                      # Test suite
     ├── unit/                   # Unit tests
