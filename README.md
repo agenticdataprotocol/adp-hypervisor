@@ -101,9 +101,11 @@ The [examples](examples/) directory contains a ready-to-run demo with Docker Com
 infrastructure and pre-configured manifests. See [examples/README.md](examples/README.md) for the
 full walkthrough.
 
-| Backend    | Status         | Description                                                                    |
-|:-----------|:---------------|:-------------------------------------------------------------------------------|
-| PostgreSQL | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents |
+| Backend    | Status         | Description                                                                       |
+|:-----------|:---------------|:----------------------------------------------------------------------------------|
+| PostgreSQL | ✅ Implemented  | E-commerce dataset (customers, products, orders) with LOOKUP and QUERY intents    |
+| pgvector   | ✅ Implemented  | Vector similarity search demo with embedded product catalog items                 |
+| MongoDB    | ✅ Implemented  | User profile collection with LOOKUP and QUERY intents in the shared examples demo |
 
 ## Development
 
@@ -161,4 +163,3 @@ adp-hypervisor/
 ## License
 
 Apache-2.0
-

@@ -32,3 +32,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: adp-demo-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: adp_user
+      MONGO_INITDB_ROOT_PASSWORD: adp_pass
+      MONGO_INITDB_DATABASE: adp_mongo_demo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongodb/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --username adp_user --password adp_pass --authenticationDatabase admin --quiet --eval \"db.adminCommand({ ping: 1 })\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
