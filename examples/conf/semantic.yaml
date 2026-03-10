@@ -133,3 +133,11 @@ resources:
         - fieldId: "login_count"
           type: "INTEGER"
           description: "Number of successful logins"
+
+  - resourceId: "demo:invoices"
+    intentClasses: ["LOOKUP", "QUERY", "INGEST", "REVISE"]
+    version: 1
+    description: "Order invoice files stored on the local filesystem, organised by fulfilment status"
+    backendId: "localfs_demo"
+    sourceDefinition:
+      source: "invoices"

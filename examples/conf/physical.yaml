@@ -34,3 +34,12 @@ backends:
     credentials:
       type: "env"
       key: "MONGO_PASSWORD"
+
+  - id: "localfs_demo"
+    type: "BLOB_STORAGE"
+    provider: "local"
+    config:
+      type: "BLOB_STORAGE"
+      uri: "examples/localfs"
+      ignore_patterns:
+        - ".*"
