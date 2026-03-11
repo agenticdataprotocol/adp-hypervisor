@@ -63,7 +63,7 @@ class TestInitializeHandlerDefaults(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["protocolVersion"], LATEST_PROTOCOL_VERSION)
         self.assertEqual(data["serverInfo"]["name"], "adp-hypervisor")
-        self.assertEqual(data["serverInfo"]["version"], "0.1.0")
+        self.assertEqual(data["serverInfo"]["version"], "0.1.0.dev0")
         self.assertIn("capabilities", data)
 
     async def test_default_capabilities_include_all_intent_classes(self) -> None:
