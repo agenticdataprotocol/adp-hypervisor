@@ -1,6 +1,6 @@
 [project]
 name = "adp-hypervisor"
-version = "0.1.0"
+version = "0.1.0.dev0"
 description = "ADP (Agentic Data Protocol) Hypervisor - A reference implementation for AI Agent data access"
 readme = "README.md"
 requires-python = ">=3.11"

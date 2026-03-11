@@ -37,7 +37,7 @@ from adp_hypervisor.protocol.types import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SERVER_INFO = Implementation(name="adp-hypervisor", version="0.1.0")
+_DEFAULT_SERVER_INFO = Implementation(name="adp-hypervisor", version="0.1.0.dev0")
 
 _DEFAULT_CAPABILITIES = ServerCapabilities(
     supported_intent_classes=[
