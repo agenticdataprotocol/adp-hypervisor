@@ -71,45 +71,49 @@ class TestBasicAuthenticator(unittest.TestCase):
 
     def test_no_meta(self) -> None:
         """Params with no _meta key raises UnauthorizedError."""
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate({})
 
     def test_empty_meta(self) -> None:
         """Empty _meta dict raises UnauthorizedError."""
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate({"_meta": {}})
 
     def test_no_authorization(self) -> None:
         """_meta without authorization key raises UnauthorizedError."""
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate({"_meta": {"other": "val"}})
 
     def test_empty_authorization(self) -> None:
         """Empty authorization string raises UnauthorizedError."""
         params = _params_with_auth("")
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate(params)
 
     def test_non_string_authorization(self) -> None:
         """Non-string authorization value raises UnauthorizedError."""
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate({"_meta": {"authorization": 123}})
 
     def test_non_dict_meta(self) -> None:
         """Non-dict _meta value raises UnauthorizedError."""
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(UnauthorizedError, "Missing credentials.*"):
             self.authenticator.authenticate({"_meta": "not a dict"})
 
     def test_invalid_scheme(self) -> None:
         """Non-Basic scheme raises UnauthorizedError."""
         params = _params_with_auth("Bearer token123")
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(
+            UnauthorizedError, "Invalid credentials format.*got scheme `Bearer`"
+        ):
             self.authenticator.authenticate(params)
 
     def test_invalid_base64(self) -> None:
         """Invalid base64 payload raises UnauthorizedError."""
         params = _params_with_auth("Basic !!!invalid!!!")
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(
+            UnauthorizedError, "Invalid credentials format.*got scheme `Basic`"
+        ):
             self.authenticator.authenticate(params)
 
     def test_no_colon_in_decoded(self) -> None:
@@ -122,7 +126,9 @@ class TestBasicAuthenticator(unittest.TestCase):
         """Empty username (colon-prefixed) raises UnauthorizedError."""
         encoded = base64.b64encode(b":password").decode()
         params = _params_with_auth(f"Basic {encoded}")
-        with self.assertRaises(UnauthorizedError):
+        with self.assertRaisesRegex(
+            UnauthorizedError, "Invalid credentials format.*got scheme `Basic`"
+        ):
             self.authenticator.authenticate(params)
 
     def test_password_not_required(self) -> None:
