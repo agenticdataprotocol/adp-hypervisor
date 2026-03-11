@@ -18,12 +18,15 @@ Ping Handler.
 Implements the adp.ping method which provides a simple health check.
 """
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel
 
 from adp_hypervisor.handlers.base import Handler
 from adp_hypervisor.protocol.types import EmptyResult
+
+logger = logging.getLogger(__name__)
 
 
 class PingHandler(Handler):
@@ -46,4 +49,5 @@ class PingHandler(Handler):
         Returns:
             An empty result indicating the server is alive.
         """
+        logger.debug("Ping received")
         return EmptyResult()

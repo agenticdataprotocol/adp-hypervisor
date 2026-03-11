@@ -218,8 +218,25 @@ class RDBMSBackend(Backend):
         if not source:
             raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
         sql, params = self._intent_to_sql(source, intent)
-        logger.debug("Executing SQL: %s | params=%s", sql, params)
+        logger.debug(
+            "Execute SQL: backend=%s, resource=%s, sql=%s, params=%s",
+            self.backend_id,
+            intent.resource_id,
+            sql,
+            params,
+        )
+        import time
+
+        start_s = time.monotonic()
         rows = await self.fetch_all(sql, params, source)
+        duration_ms = int((time.monotonic() - start_s) * 1000)
+        logger.info(
+            "Query completed: backend=%s, resource=%s, rows=%d, duration_ms=%d",
+            self.backend_id,
+            intent.resource_id,
+            len(rows),
+            duration_ms,
+        )
         return BackendResult(rows=rows)
 
     # -------------------------------------------------------------------------

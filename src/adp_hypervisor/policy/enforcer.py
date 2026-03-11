@@ -80,7 +80,9 @@ class PolicyEnforcer:
             The resolved role string.
         """
         user = self._authenticator.authenticate(params)
-        return self._role_resolver.resolve(user)
+        role = self._role_resolver.resolve(user)
+        logger.debug("Role resolved: user=%r, role=%r", user, role)
+        return role
 
     def check_access(self, resource_id: str, role: str, intent_class: IntentClass) -> None:
         """Check ACCESS policy for a (resource, role, intent) triple.
@@ -108,6 +110,12 @@ class PolicyEnforcer:
         policies = self._manifest_index.get_access_policies_for_resource(resource_id)
 
         if not policies:
+            logger.warning(
+                "Access denied: no policy for resource=%r, role=%r, intent=%s",
+                resource_id,
+                role,
+                intent_class.value,
+            )
             raise UnauthorizedError(
                 f"Access denied: no ACCESS policy matches resource {resource_id!r}"
             )
@@ -115,18 +123,43 @@ class PolicyEnforcer:
         allowed_intents = self._merge_allowed_intents(policies, role)
 
         if not allowed_intents:
+            logger.warning(
+                "Access denied: role not permitted, resource=%r, role=%r, intent=%s",
+                resource_id,
+                role,
+                intent_class.value,
+            )
             raise UnauthorizedError(
                 f"Access denied: role {role!r} is not permitted " f"for resource {resource_id!r}"
             )
 
         if IntentClass.WILDCARD in allowed_intents:
+            logger.debug(
+                "Access granted (wildcard): resource=%r, role=%r, intent=%s",
+                resource_id,
+                role,
+                intent_class.value,
+            )
             return
 
         if intent_class not in allowed_intents:
+            logger.warning(
+                "Access denied: intent not allowed, resource=%r, role=%r, intent=%s",
+                resource_id,
+                role,
+                intent_class.value,
+            )
             raise UnauthorizedError(
                 f"Access denied: role {role!r} cannot use intent "
                 f"{intent_class.value} on resource {resource_id!r}"
             )
+
+        logger.debug(
+            "Access granted: resource=%r, role=%r, intent=%s",
+            resource_id,
+            role,
+            intent_class.value,
+        )
 
     def filter_accessible_resources(
         self, resources: list[CuratedResource], role: str

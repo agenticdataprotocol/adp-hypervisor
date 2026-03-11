@@ -1,0 +1,38 @@
+# ADP Hypervisor Logging Configuration
+#
+# This file configures the Python logging system via logging.config.dictConfig.
+# Copy this template to your runtime config directory as logging_conf.yaml and
+# adjust the values to suit your environment.
+#
+# Usage:
+#   cp conf/logging_conf.yaml.template <config-dir>/logging_conf.yaml
+#
+# The log level can also be overridden at startup with --log-level.
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: standard
+    stream: ext://sys.stderr
+
+  file_handler:
+    class: logging.handlers.RotatingFileHandler
+    formatter: standard
+    filename: ./hypervisor-logs/hypervisor.log
+    maxBytes: 10485760   # 10 MB
+    backupCount: 5
+    encoding: utf-8
+
+root:
+  level: INFO
+  handlers:
+    - console
+    - file_handler

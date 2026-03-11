@@ -28,8 +28,13 @@ Usage::
 import argparse
 import asyncio
 import logging
+import logging.config
+import logging.handlers
 import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
 from adp_hypervisor.policy import UserRoleConfig, YamlRoleResolver
@@ -40,6 +45,38 @@ logger = logging.getLogger(__name__)
 
 _VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 _VALID_TRANSPORTS = ("stdio", "http")
+
+# Built-in default logging config, matches conf/logging_conf.yaml.template.
+# Used when no logging_conf.yaml is present in the config directory.
+_DEFAULT_LOGGING_CONFIG: dict[str, Any] = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+            "stream": "ext://sys.stderr",
+        },
+        "file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "standard",
+            "filename": "./hypervisor-logs/hypervisor.log",
+            "maxBytes": 10485760,
+            "backupCount": 5,
+            "encoding": "utf-8",
+        },
+    },
+    "root": {
+        "level": "INFO",
+        "handlers": ["console", "file_handler"],
+    },
+}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -56,9 +93,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default=None,
         choices=_VALID_LOG_LEVELS,
-        help="Logging level (default: INFO)",
+        help="Override the root logging level (default: level from logging_conf.yaml or INFO)",
     )
     parser.add_argument(
         "--transport",
@@ -69,13 +106,73 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging(level: str) -> None:
-    """Configure root logging with a consistent format."""
-    logging.basicConfig(
-        level=getattr(logging, level),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stderr,
-    )
+def _load_logging_config(config_dir: Path) -> dict[str, Any]:
+    """Load logging configuration from config_dir/logging_conf.yaml.
+
+    Falls back to the built-in default when the file is absent.
+
+    Args:
+        config_dir: The runtime config directory.
+
+    Returns:
+        A dict suitable for logging.config.dictConfig.
+    """
+    logging_conf_path = config_dir / "logging_conf.yaml"
+    if logging_conf_path.exists():
+        try:
+            raw = yaml.safe_load(logging_conf_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                return raw
+        except (yaml.YAMLError, OSError):
+            print(
+                f"Warning: failed to parse {logging_conf_path}, using built-in logging defaults.",
+                file=sys.stderr,
+            )
+    return _DEFAULT_LOGGING_CONFIG
+
+
+def _ensure_log_directories(config: dict[str, Any]) -> None:
+    """Create parent directories for all file-based log handlers.
+
+    Scans every handler in the config dict, resolves the parent directory
+    for any handler that has a ``filename`` key, and creates it if missing.
+    Emits a startup notice to stderr for each resolved log file path.
+
+    Args:
+        config: The logging config dict (as passed to dictConfig).
+    """
+    handlers = config.get("handlers", {})
+    for _name, handler_cfg in handlers.items():
+        filename = handler_cfg.get("filename")
+        if not filename:
+            continue
+        log_path = Path(filename).resolve()
+        log_dir = log_path.parent
+        log_dir.mkdir(parents=True, exist_ok=True)
+        print(
+            f"ADP Hypervisor: logging to file {log_path}",
+            file=sys.stderr,
+        )
+
+
+def _configure_logging(config_dir: Path, level_override: str | None) -> None:
+    """Load and apply logging configuration.
+
+    Reads logging_conf.yaml from config_dir (falls back to built-in defaults),
+    ensures all file-handler directories exist, then applies the config via
+    dictConfig. Overrides the root log level when --log-level is provided.
+
+    Args:
+        config_dir: The runtime config directory.
+        level_override: Optional log level string (e.g. "DEBUG") from --log-level.
+    """
+    config = _load_logging_config(config_dir)
+
+    if level_override is not None:
+        config.setdefault("root", {})["level"] = level_override
+
+    _ensure_log_directories(config)
+    logging.config.dictConfig(config)
 
 
 def _create_yaml_provider(config_dir: Path) -> YamlManifestProvider:
@@ -161,22 +258,23 @@ def main(args: list[str] | None = None) -> None:
     parser = _build_parser()
     parsed = parser.parse_args(args)
 
-    _configure_logging(parsed.log_level)
+    config_dir = Path(parsed.config)
+    _configure_logging(config_dir, parsed.log_level)
 
     if parsed.transport == "http":
         logger.error("HTTP transport is not yet implemented")
         sys.exit(1)
 
     transport = StdioTransport()
-    provider = _create_yaml_provider(Path(parsed.config))
-    role_resolver = _create_role_resolver(Path(parsed.config))
+    provider = _create_yaml_provider(config_dir)
+    role_resolver = _create_role_resolver(config_dir)
     server = ADPServer(manifest_provider=provider, transport=transport, role_resolver=role_resolver)
 
     logger.info(
         "Starting ADP Hypervisor: config=%s, transport=%s, log_level=%s",
         parsed.config,
         parsed.transport,
-        parsed.log_level,
+        parsed.log_level or "from config",
     )
 
     asyncio.run(server.run())
