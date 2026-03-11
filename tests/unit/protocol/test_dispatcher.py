@@ -18,7 +18,9 @@ import json
 import unittest
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic import Field as PydanticField
+from pydantic.alias_generators import to_camel
 
 from adp_hypervisor.protocol import (
     Dispatcher,
@@ -62,6 +64,26 @@ class ErrorHandler(Handler):
             raise InvalidParamsError("Invalid parameter")
         elif error_type == "unexpected":
             raise RuntimeError("Unexpected error")
+        return EmptyResult()
+
+
+class ValidationParams(BaseModel):
+    """A params model that raises Pydantic validation errors."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    protocol_version: str = PydanticField(...)
+
+
+class ValidationErrorHandler(Handler):
+    """A handler that validates params with Pydantic."""
+
+    @property
+    def method(self) -> str:
+        return "test.validation"
+
+    async def handle(self, params: dict[str, Any]) -> BaseModel:
+        ValidationParams.model_validate(params)
         return EmptyResult()
 
 
@@ -227,6 +249,56 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["error"]["code"], -32600)  # Invalid request
         self.assertIsNone(response["id"])
+        self.assertEqual(
+            response["error"]["message"],
+            "Invalid request: `id`: Field is required; `method`: Field is required.",
+        )
+        self.assertEqual(
+            response["error"]["data"],
+            {
+                "model": "JSONRPCRequest",
+                "validationErrors": [
+                    {"path": "id", "message": "Field is required", "type": "missing"},
+                    {"path": "method", "message": "Field is required", "type": "missing"},
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
+
+    async def test_dispatch_invalid_request_collapses_union_type_errors(self) -> None:
+        dispatcher = Dispatcher()
+
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1.5,
+                "method": "test.method",
+            }
+        )
+
+        response_str = await dispatcher.dispatch(request)
+        response = json.loads(response_str)
+
+        self.assertEqual(response["error"]["code"], -32600)
+        self.assertEqual(
+            response["error"]["message"],
+            "Invalid request: `id`: Must be a valid integer or string.",
+        )
+        self.assertEqual(
+            response["error"]["data"],
+            {
+                "model": "JSONRPCRequest",
+                "validationErrors": [
+                    {
+                        "path": "id",
+                        "message": "Must be a valid integer or string",
+                        "type": "union_type",
+                        "expectedTypes": ["integer", "string"],
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
 
     async def test_dispatch_method_not_found(self) -> None:
         dispatcher = Dispatcher()
@@ -264,6 +336,42 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
         response = json.loads(response_str)
 
         self.assertEqual(response["error"]["code"], -32602)  # Invalid params
+
+    async def test_dispatch_handler_pydantic_validation_error(self) -> None:
+        dispatcher = Dispatcher()
+        dispatcher.register_handler(ValidationErrorHandler())
+
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "test.validation",
+                "params": {"protocolVersion": 123},
+            }
+        )
+
+        response_str = await dispatcher.dispatch(request)
+        response = json.loads(response_str)
+
+        self.assertEqual(response["error"]["code"], -32602)
+        self.assertEqual(
+            response["error"]["message"],
+            "Invalid params: `protocolVersion`: Must be a valid string.",
+        )
+        self.assertEqual(
+            response["error"]["data"],
+            {
+                "model": "ValidationParams",
+                "validationErrors": [
+                    {
+                        "path": "protocolVersion",
+                        "message": "Must be a valid string",
+                        "type": "string_type",
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
 
     async def test_dispatch_handler_unexpected_error(self) -> None:
         dispatcher = Dispatcher()

@@ -46,9 +46,167 @@ from adp_hypervisor.protocol.jsonrpc import (
 
 logger = logging.getLogger(__name__)
 
+_VALIDATION_TYPE_LABELS = {
+    "bool_type": "boolean",
+    "dict_type": "object",
+    "float_type": "number",
+    "int_type": "integer",
+    "list_type": "array",
+    "string_type": "string",
+}
+
+_UNION_BRANCH_LABELS = {
+    "bool": "boolean",
+    "dict": "object",
+    "float": "number",
+    "int": "integer",
+    "list": "array",
+    "str": "string",
+}
+
 
 # Type alias for handler functions
 HandlerFunc = Callable[[dict[str, Any]], Any]
+
+
+def _format_validation_error(
+    prefix: str, validation_error: ValidationError
+) -> tuple[str, dict[str, Any]]:
+    """Convert a Pydantic validation error into JSON-RPC-friendly message and data."""
+    details = _collect_validation_errors(validation_error)
+    data: dict[str, Any] = {"validationErrors": details}
+    if validation_error.title:
+        data["model"] = validation_error.title
+    return _build_validation_message(prefix, details), data
+
+
+def _collect_validation_errors(validation_error: ValidationError) -> list[dict[str, Any]]:
+    """Normalize Pydantic validation errors into a compact, stable structure."""
+    issues: list[dict[str, Any]] = []
+    union_issue_indexes: dict[tuple[Any, ...], int] = {}
+    raw_errors = validation_error.errors(
+        include_url=False,
+        include_input=False,
+        include_context=False,
+    )
+
+    for raw_error in raw_errors:
+        error_type = str(raw_error["type"])
+        loc = tuple(raw_error.get("loc", ()))
+        union_label = _extract_union_branch(loc, error_type)
+        if union_label is not None:
+            base_loc = loc[:-1]
+            issue_index = union_issue_indexes.get(base_loc)
+            if issue_index is None:
+                issue_index = len(issues)
+                union_issue_indexes[base_loc] = issue_index
+                issues.append(
+                    {
+                        "path": _format_error_path(base_loc),
+                        "message": "",
+                        "type": "union_type",
+                        "expectedTypes": [],
+                    }
+                )
+
+            expected_types = issues[issue_index]["expectedTypes"]
+            if isinstance(expected_types, list) and union_label not in expected_types:
+                expected_types.append(union_label)
+            continue
+
+        issues.append(
+            {
+                "path": _format_error_path(loc),
+                "message": _normalize_error_message(error_type, str(raw_error["msg"])),
+                "type": error_type,
+            }
+        )
+
+    for issue in issues:
+        if issue["type"] != "union_type":
+            continue
+
+        expected_types = issue["expectedTypes"]
+        if not isinstance(expected_types, list):
+            continue
+
+        issue["message"] = f"Must be a valid {_join_expected_types(expected_types)}"
+
+    return issues
+
+
+def _extract_union_branch(loc: tuple[Any, ...], error_type: str) -> str | None:
+    """Return a readable union branch label when Pydantic reports branch-specific failures."""
+    if len(loc) < 2 or error_type not in _VALIDATION_TYPE_LABELS:
+        return None
+
+    branch = loc[-1]
+    if not isinstance(branch, str):
+        return None
+
+    return _UNION_BRANCH_LABELS.get(branch)
+
+
+def _format_error_path(loc: tuple[Any, ...]) -> str:
+    """Format a Pydantic location tuple as a dotted field path."""
+    if not loc:
+        return "<root>"
+
+    parts: list[str] = []
+    for segment in loc:
+        if isinstance(segment, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{segment}]"
+            else:
+                parts.append(f"[{segment}]")
+            continue
+        parts.append(str(segment))
+
+    return ".".join(parts)
+
+
+def _normalize_error_message(error_type: str, message: str) -> str:
+    """Rewrite common Pydantic messages into short, client-facing text."""
+    if error_type == "missing":
+        return "Field is required"
+
+    type_label = _VALIDATION_TYPE_LABELS.get(error_type)
+    if type_label is not None:
+        return f"Must be a valid {type_label}"
+
+    return message.rstrip(".")
+
+
+def _join_expected_types(expected_types: list[str]) -> str:
+    """Join human-readable type names for union validation errors."""
+    if not expected_types:
+        return "value"
+    if len(expected_types) == 1:
+        return expected_types[0]
+    if len(expected_types) == 2:
+        return f"{expected_types[0]} or {expected_types[1]}"
+    return f"{', '.join(expected_types[:-1])}, or {expected_types[-1]}"
+
+
+def _build_validation_message(prefix: str, details: list[dict[str, Any]]) -> str:
+    """Build a concise validation summary for JSON-RPC error.message."""
+    if not details:
+        return prefix
+
+    snippets = [_format_issue_snippet(detail) for detail in details[:3]]
+    message = f"{prefix}: {'; '.join(snippets)}"
+    if len(details) > 3:
+        message = f"{message}; and {len(details) - 3} more validation errors"
+    return f"{message}."
+
+
+def _format_issue_snippet(detail: dict[str, Any]) -> str:
+    """Format one validation issue for inclusion in an error summary."""
+    message = str(detail["message"]).rstrip(".")
+    path = str(detail["path"])
+    if path == "<root>":
+        return message
+    return f"`{path}`: {message}"
 
 
 class Dispatcher:
@@ -152,8 +310,9 @@ class Dispatcher:
                 request_id = request.id
                 method = request.method
             except ValidationError as e:
-                logger.debug("Invalid JSON-RPC request: %s", e)
-                raise InvalidRequestError(f"Invalid request: {e}") from e
+                message, error_data = _format_validation_error("Invalid request", e)
+                logger.warning("Invalid JSON-RPC request: %s", message)
+                raise InvalidRequestError(message, data=error_data) from e
 
             logger.debug("Dispatch: method=%s, request_id=%s", method, request_id)
 
@@ -227,7 +386,8 @@ class Dispatcher:
         try:
             return JSONRPCRequest.model_validate(data)
         except ValidationError as e:
-            raise InvalidRequestError(f"Invalid request: {e}") from e
+            message, error_data = _format_validation_error("Invalid request", e)
+            raise InvalidRequestError(message, data=error_data) from e
 
     def build_response(self, request_id: RequestId, result: BaseModel) -> JSONRPCResultResponse:
         """
@@ -295,7 +455,8 @@ class Dispatcher:
             raise
         except ValidationError as e:
             # Convert Pydantic validation errors to InvalidParamsError
-            raise InvalidParamsError(str(e)) from e
+            message, error_data = _format_validation_error("Invalid params", e)
+            raise InvalidParamsError(message, data=error_data) from e
         except Exception as e:
             # Wrap unexpected errors
             logger.exception("Handler error for method %s", method)
