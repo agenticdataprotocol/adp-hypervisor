@@ -56,15 +56,25 @@ class BasicAuthenticator(Authenticator):
         """
         meta = params.get("_meta")
         if not isinstance(meta, dict):
-            raise UnauthorizedError("Missing credentials")
+            raise UnauthorizedError(
+                "Missing credentials: set `_meta.authorization` in request params "
+                "(e.g. `Basic base64(username:password)`)"
+            )
 
         authorization = meta.get("authorization")
         if not isinstance(authorization, str) or not authorization:
-            raise UnauthorizedError("Missing credentials")
+            raise UnauthorizedError(
+                "Missing credentials: set `_meta.authorization` in request params "
+                "(e.g. `Basic base64(username:password)`)"
+            )
 
         username = self._parse_basic_auth(authorization)
         if username is None:
-            raise UnauthorizedError("Invalid credentials format")
+            scheme, _, _ = authorization.partition(" ")
+            raise UnauthorizedError(
+                f"Invalid credentials format: expected `Basic base64(username:password)`, "
+                f"got scheme `{scheme}`"
+            )
 
         logger.debug("Authenticated user %r via Basic Auth", username)
         return username
