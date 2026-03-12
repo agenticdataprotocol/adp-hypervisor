@@ -46,9 +46,78 @@ from adp_hypervisor.protocol.jsonrpc import (
 
 logger = logging.getLogger(__name__)
 
-
 # Type alias for handler functions
 HandlerFunc = Callable[[dict[str, Any]], Any]
+
+# Maximum number of individual errors shown in the summary message.
+_MAX_SUMMARY_ERRORS = 3
+
+
+def _format_validation_error(
+    prefix: str, validation_error: ValidationError
+) -> tuple[str, dict[str, Any]]:
+    """Convert a Pydantic ValidationError into a JSON-RPC-friendly message and data payload.
+
+    Uses Pydantic's own ``msg`` text as-is (e.g. "Field required",
+    "Input should be a valid string") instead of rewriting messages manually.
+    This keeps the code simple and automatically benefits from upstream
+    improvements in Pydantic's error descriptions.
+
+    Args:
+        prefix: A short label for the error context, e.g. "Invalid request".
+        validation_error: The Pydantic validation error to format.
+
+    Returns:
+        A ``(summary_message, data_dict)`` tuple where *data_dict* contains
+        a ``validationErrors`` list suitable for ``error.data`` in a JSON-RPC
+        error response.
+    """
+    raw_errors = validation_error.errors(
+        include_url=False, include_input=False, include_context=False
+    )
+    details = [
+        {"path": _format_loc(e["loc"]), "message": e["msg"], "type": e["type"]} for e in raw_errors
+    ]
+    data: dict[str, Any] = {"validationErrors": details}
+    if validation_error.title:
+        data["model"] = validation_error.title
+    return _build_summary(prefix, details), data
+
+
+def _format_loc(loc: tuple[Any, ...]) -> str:
+    """Format a Pydantic ``loc`` tuple into a human-readable dotted path.
+
+    Pydantic represents field locations as tuples like ``("items", 0, "name")``.
+    This converts them into dotted notation: ``"items[0].name"``.
+    """
+    if not loc:
+        return "<root>"
+    parts: list[str] = []
+    for segment in loc:
+        if isinstance(segment, int):
+            # Array index — attach to the preceding path segment: "items" → "items[0]"
+            if parts:
+                parts[-1] = f"{parts[-1]}[{segment}]"
+            else:
+                parts.append(f"[{segment}]")
+        else:
+            parts.append(str(segment))
+    return ".".join(parts)
+
+
+def _build_summary(prefix: str, details: list[dict[str, Any]]) -> str:
+    """Build a one-line summary from the first few validation errors."""
+    if not details:
+        return prefix
+    snippets: list[str] = []
+    for d in details[:_MAX_SUMMARY_ERRORS]:
+        path = d["path"]
+        snippets.append(d["message"] if path == "<root>" else f"`{path}`: {d['message']}")
+    summary = f"{prefix}: {'; '.join(snippets)}."
+    remaining = len(details) - _MAX_SUMMARY_ERRORS
+    if remaining > 0:
+        summary = f"{prefix}: {'; '.join(snippets)}; and {remaining} more."
+    return summary
 
 
 class Dispatcher:
@@ -152,8 +221,9 @@ class Dispatcher:
                 request_id = request.id
                 method = request.method
             except ValidationError as e:
-                logger.debug("Invalid JSON-RPC request: %s", e)
-                raise InvalidRequestError(f"Invalid request: {e}") from e
+                error_message, error_data = _format_validation_error("Invalid request", e)
+                logger.debug("Invalid JSON-RPC request: %s", error_message)
+                raise InvalidRequestError(error_message, data=error_data) from e
 
             logger.debug("Dispatch: method=%s, request_id=%s", method, request_id)
 
@@ -227,7 +297,8 @@ class Dispatcher:
         try:
             return JSONRPCRequest.model_validate(data)
         except ValidationError as e:
-            raise InvalidRequestError(f"Invalid request: {e}") from e
+            error_message, error_data = _format_validation_error("Invalid request", e)
+            raise InvalidRequestError(error_message, data=error_data) from e
 
     def build_response(self, request_id: RequestId, result: BaseModel) -> JSONRPCResultResponse:
         """
@@ -294,8 +365,8 @@ class Dispatcher:
             # Re-raise ADP errors as-is
             raise
         except ValidationError as e:
-            # Convert Pydantic validation errors to InvalidParamsError
-            raise InvalidParamsError(str(e)) from e
+            error_message, error_data = _format_validation_error("Invalid params", e)
+            raise InvalidParamsError(error_message, data=error_data) from e
         except Exception as e:
             # Wrap unexpected errors
             logger.exception("Handler error for method %s", method)

@@ -65,6 +65,24 @@ class ErrorHandler(Handler):
         return EmptyResult()
 
 
+class ValidationParams(BaseModel):
+    """A params model that raises Pydantic validation errors."""
+
+    protocol_version: str
+
+
+class ValidationErrorHandler(Handler):
+    """A handler that validates params with Pydantic."""
+
+    @property
+    def method(self) -> str:
+        return "test.validation"
+
+    async def handle(self, params: dict[str, Any]) -> BaseModel:
+        ValidationParams.model_validate(params)
+        return EmptyResult()
+
+
 class TestDispatcherRegistration(unittest.TestCase):
     """Tests for handler registration."""
 
@@ -227,6 +245,44 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["error"]["code"], -32600)  # Invalid request
         self.assertIsNone(response["id"])
+        self.assertEqual(
+            response["error"]["message"],
+            "Invalid request: `id`: Field required; `method`: Field required.",
+        )
+        self.assertEqual(
+            response["error"]["data"],
+            {
+                "model": "JSONRPCRequest",
+                "validationErrors": [
+                    {"path": "id", "message": "Field required", "type": "missing"},
+                    {"path": "method", "message": "Field required", "type": "missing"},
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
+
+    async def test_dispatch_invalid_request_reports_per_branch_union_errors(self) -> None:
+        """Union fields produce one error per branch with Pydantic's native messages."""
+        dispatcher = Dispatcher()
+
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1.5,
+                "method": "test.method",
+            }
+        )
+
+        response_str = await dispatcher.dispatch(request)
+        response = json.loads(response_str)
+
+        self.assertEqual(response["error"]["code"], -32600)
+        # Pydantic emits one error per union branch (id.int and id.str)
+        validation_errors = response["error"]["data"]["validationErrors"]
+        self.assertEqual(len(validation_errors), 2)
+        self.assertEqual(validation_errors[0]["path"], "id.int")
+        self.assertEqual(validation_errors[1]["path"], "id.str")
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
 
     async def test_dispatch_method_not_found(self) -> None:
         dispatcher = Dispatcher()
@@ -264,6 +320,42 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
         response = json.loads(response_str)
 
         self.assertEqual(response["error"]["code"], -32602)  # Invalid params
+
+    async def test_dispatch_handler_pydantic_validation_error(self) -> None:
+        dispatcher = Dispatcher()
+        dispatcher.register_handler(ValidationErrorHandler())
+
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "test.validation",
+                "params": {"protocol_version": 123},
+            }
+        )
+
+        response_str = await dispatcher.dispatch(request)
+        response = json.loads(response_str)
+
+        self.assertEqual(response["error"]["code"], -32602)
+        self.assertEqual(
+            response["error"]["message"],
+            "Invalid params: `protocol_version`: Input should be a valid string.",
+        )
+        self.assertEqual(
+            response["error"]["data"],
+            {
+                "model": "ValidationParams",
+                "validationErrors": [
+                    {
+                        "path": "protocol_version",
+                        "message": "Input should be a valid string",
+                        "type": "string_type",
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", response["error"]["message"])
 
     async def test_dispatch_handler_unexpected_error(self) -> None:
         dispatcher = Dispatcher()

@@ -464,3 +464,92 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         resp = responses[0]
         self.assertIn("error", resp)
         self.assertEqual(resp["error"]["code"], -32601)
+
+    async def test_error_invalid_request_includes_structured_validation_details(self) -> None:
+        """Test invalid request envelope errors returned by the real server."""
+        request = json.dumps({"jsonrpc": "2.0"})
+
+        responses = await self._start_server_and_send([request])
+
+        self.assertEqual(len(responses), 1)
+        resp = responses[0]
+        self.assertEqual(resp["jsonrpc"], "2.0")
+        self.assertIsNone(resp["id"])
+        self.assertEqual(resp["error"]["code"], -32600)
+        self.assertEqual(
+            resp["error"]["message"],
+            "Invalid request: `id`: Field required; `method`: Field required.",
+        )
+        self.assertEqual(
+            resp["error"]["data"],
+            {
+                "model": "JSONRPCRequest",
+                "validationErrors": [
+                    {"path": "id", "message": "Field required", "type": "missing"},
+                    {"path": "method", "message": "Field required", "type": "missing"},
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", resp["error"]["message"])
+
+    async def test_error_invalid_request_id_includes_structured_validation_details(self) -> None:
+        """Test invalid request id type errors returned by the real server."""
+        request = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1.5,
+                "method": "adp.ping",
+                "params": {"_meta": _DEFAULT_META},
+            }
+        )
+
+        responses = await self._start_server_and_send([request])
+
+        self.assertEqual(len(responses), 1)
+        resp = responses[0]
+        self.assertEqual(resp["jsonrpc"], "2.0")
+        self.assertIsNone(resp["id"])
+        self.assertEqual(resp["error"]["code"], -32600)
+        # Pydantic emits one error per union branch (id.int and id.str)
+        validation_errors = resp["error"]["data"]["validationErrors"]
+        self.assertEqual(len(validation_errors), 2)
+        self.assertEqual(validation_errors[0]["path"], "id.int")
+        self.assertEqual(validation_errors[1]["path"], "id.str")
+        self.assertNotIn("pydantic.dev", resp["error"]["message"])
+
+    async def test_error_invalid_params_includes_structured_validation_details(self) -> None:
+        """Test invalid params errors returned by the real server."""
+        request = _jsonrpc_request(
+            "adp.initialize",
+            {
+                "protocolVersion": 123,
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0"},
+            },
+        )
+
+        responses = await self._start_server_and_send([request])
+
+        self.assertEqual(len(responses), 1)
+        resp = responses[0]
+        self.assertEqual(resp["jsonrpc"], "2.0")
+        self.assertEqual(resp["id"], 1)
+        self.assertEqual(resp["error"]["code"], -32602)
+        self.assertEqual(
+            resp["error"]["message"],
+            "Invalid params: `protocolVersion`: Input should be a valid string.",
+        )
+        self.assertEqual(
+            resp["error"]["data"],
+            {
+                "model": "InitializeRequestParams",
+                "validationErrors": [
+                    {
+                        "path": "protocolVersion",
+                        "message": "Input should be a valid string",
+                        "type": "string_type",
+                    }
+                ],
+            },
+        )
+        self.assertNotIn("pydantic.dev", resp["error"]["message"])
