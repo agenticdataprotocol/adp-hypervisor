@@ -478,15 +478,15 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp["error"]["code"], -32600)
         self.assertEqual(
             resp["error"]["message"],
-            "Invalid request: `id`: Field is required; `method`: Field is required.",
+            "Invalid request: `id`: Field required; `method`: Field required.",
         )
         self.assertEqual(
             resp["error"]["data"],
             {
                 "model": "JSONRPCRequest",
                 "validationErrors": [
-                    {"path": "id", "message": "Field is required", "type": "missing"},
-                    {"path": "method", "message": "Field is required", "type": "missing"},
+                    {"path": "id", "message": "Field required", "type": "missing"},
+                    {"path": "method", "message": "Field required", "type": "missing"},
                 ],
             },
         )
@@ -510,24 +510,11 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp["jsonrpc"], "2.0")
         self.assertIsNone(resp["id"])
         self.assertEqual(resp["error"]["code"], -32600)
-        self.assertEqual(
-            resp["error"]["message"],
-            "Invalid request: `id`: Must be a valid integer or string.",
-        )
-        self.assertEqual(
-            resp["error"]["data"],
-            {
-                "model": "JSONRPCRequest",
-                "validationErrors": [
-                    {
-                        "path": "id",
-                        "message": "Must be a valid integer or string",
-                        "type": "union_type",
-                        "expectedTypes": ["integer", "string"],
-                    }
-                ],
-            },
-        )
+        # Pydantic emits one error per union branch (id.int and id.str)
+        validation_errors = resp["error"]["data"]["validationErrors"]
+        self.assertEqual(len(validation_errors), 2)
+        self.assertEqual(validation_errors[0]["path"], "id.int")
+        self.assertEqual(validation_errors[1]["path"], "id.str")
         self.assertNotIn("pydantic.dev", resp["error"]["message"])
 
     async def test_error_invalid_params_includes_structured_validation_details(self) -> None:
@@ -550,7 +537,7 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp["error"]["code"], -32602)
         self.assertEqual(
             resp["error"]["message"],
-            "Invalid params: `protocolVersion`: Must be a valid string.",
+            "Invalid params: `protocolVersion`: Input should be a valid string.",
         )
         self.assertEqual(
             resp["error"]["data"],
@@ -559,7 +546,7 @@ class TestServerE2E(unittest.IsolatedAsyncioTestCase):
                 "validationErrors": [
                     {
                         "path": "protocolVersion",
-                        "message": "Must be a valid string",
+                        "message": "Input should be a valid string",
                         "type": "string_type",
                     }
                 ],

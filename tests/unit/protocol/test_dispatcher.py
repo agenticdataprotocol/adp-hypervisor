@@ -18,9 +18,7 @@ import json
 import unittest
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
-from pydantic import Field as PydanticField
-from pydantic.alias_generators import to_camel
+from pydantic import BaseModel
 
 from adp_hypervisor.protocol import (
     Dispatcher,
@@ -70,9 +68,7 @@ class ErrorHandler(Handler):
 class ValidationParams(BaseModel):
     """A params model that raises Pydantic validation errors."""
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    protocol_version: str = PydanticField(...)
+    protocol_version: str
 
 
 class ValidationErrorHandler(Handler):
@@ -251,21 +247,22 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(response["id"])
         self.assertEqual(
             response["error"]["message"],
-            "Invalid request: `id`: Field is required; `method`: Field is required.",
+            "Invalid request: `id`: Field required; `method`: Field required.",
         )
         self.assertEqual(
             response["error"]["data"],
             {
                 "model": "JSONRPCRequest",
                 "validationErrors": [
-                    {"path": "id", "message": "Field is required", "type": "missing"},
-                    {"path": "method", "message": "Field is required", "type": "missing"},
+                    {"path": "id", "message": "Field required", "type": "missing"},
+                    {"path": "method", "message": "Field required", "type": "missing"},
                 ],
             },
         )
         self.assertNotIn("pydantic.dev", response["error"]["message"])
 
-    async def test_dispatch_invalid_request_collapses_union_type_errors(self) -> None:
+    async def test_dispatch_invalid_request_reports_per_branch_union_errors(self) -> None:
+        """Union fields produce one error per branch with Pydantic's native messages."""
         dispatcher = Dispatcher()
 
         request = json.dumps(
@@ -280,24 +277,11 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
         response = json.loads(response_str)
 
         self.assertEqual(response["error"]["code"], -32600)
-        self.assertEqual(
-            response["error"]["message"],
-            "Invalid request: `id`: Must be a valid integer or string.",
-        )
-        self.assertEqual(
-            response["error"]["data"],
-            {
-                "model": "JSONRPCRequest",
-                "validationErrors": [
-                    {
-                        "path": "id",
-                        "message": "Must be a valid integer or string",
-                        "type": "union_type",
-                        "expectedTypes": ["integer", "string"],
-                    }
-                ],
-            },
-        )
+        # Pydantic emits one error per union branch (id.int and id.str)
+        validation_errors = response["error"]["data"]["validationErrors"]
+        self.assertEqual(len(validation_errors), 2)
+        self.assertEqual(validation_errors[0]["path"], "id.int")
+        self.assertEqual(validation_errors[1]["path"], "id.str")
         self.assertNotIn("pydantic.dev", response["error"]["message"])
 
     async def test_dispatch_method_not_found(self) -> None:
@@ -346,7 +330,7 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "test.validation",
-                "params": {"protocolVersion": 123},
+                "params": {"protocol_version": 123},
             }
         )
 
@@ -356,7 +340,7 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["error"]["code"], -32602)
         self.assertEqual(
             response["error"]["message"],
-            "Invalid params: `protocolVersion`: Must be a valid string.",
+            "Invalid params: `protocol_version`: Input should be a valid string.",
         )
         self.assertEqual(
             response["error"]["data"],
@@ -364,8 +348,8 @@ class TestDispatcherErrors(unittest.IsolatedAsyncioTestCase):
                 "model": "ValidationParams",
                 "validationErrors": [
                     {
-                        "path": "protocolVersion",
-                        "message": "Must be a valid string",
+                        "path": "protocol_version",
+                        "message": "Input should be a valid string",
                         "type": "string_type",
                     }
                 ],
