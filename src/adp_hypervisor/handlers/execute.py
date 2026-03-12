@@ -98,6 +98,12 @@ class ExecuteHandler(Handler):
         request = ExecuteRequestParams.model_validate(params)
 
         resource_id = request.intent.resource_id
+        logger.debug(
+            "Execute: started resource=%s, intent_class=%s",
+            resource_id,
+            request.intent.intent_class,
+        )
+
         resource = self._manifest_index.get_resource(resource_id)
         if resource is None:
             raise ResourceNotFoundError(f"Resource not found: {resource_id!r}")
@@ -134,8 +140,9 @@ class ExecuteHandler(Handler):
         # based on the result set and pass it back via next_cursor.
 
         logger.info(
-            "Execute: resource=%s, intent_class=%s, rows=%d, duration_ms=%d",
+            "Execute: resource=%s, backend=%s, intent_class=%s, rows=%d, duration_ms=%d",
             resource_id,
+            resource.backend_id,
             request.intent.intent_class,
             len(result.rows),
             duration_ms,

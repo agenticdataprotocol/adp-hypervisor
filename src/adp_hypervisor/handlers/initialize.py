@@ -94,7 +94,7 @@ class InitializeHandler(Handler):
         """
         request = InitializeRequestParams.model_validate(params)
 
-        logger.info(
+        logger.debug(
             "Initialize request from %s/%s, protocol version: %s",
             request.client_info.name,
             request.client_info.version,
@@ -107,6 +107,13 @@ class InitializeHandler(Handler):
                 f"Unsupported protocol version: {request.protocol_version!r}. "
                 f"Supported versions: {supported}"
             )
+
+        logger.info(
+            "Initialize: client=%s/%s, protocol_version=%s accepted",
+            request.client_info.name,
+            request.client_info.version,
+            request.protocol_version,
+        )
 
         return InitializeResult(
             protocol_version=request.protocol_version,

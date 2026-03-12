@@ -70,11 +70,41 @@ The server starts in stdio mode, reading JSON-RPC requests from stdin and writin
 python -m adp_hypervisor --config <path> [--log-level LEVEL] [--transport TYPE]
 ```
 
-| Option        | Default  | Description                                                            |
-|:--------------|:---------|:-----------------------------------------------------------------------|
-| `--config`    | Required | Path to manifest directory (physical.yaml, semantic.yaml, policy.yaml) |
-| `--log-level` | `INFO`   | Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL                   |
-| `--transport` | `stdio`  | Transport type: `stdio` (HTTP planned for future release)              |
+| Option        | Default            | Description                                                            |
+|:--------------|:-------------------|:-----------------------------------------------------------------------|
+| `--config`    | Required           | Path to manifest directory (physical.yaml, semantic.yaml, policy.yaml) |
+| `--log-level` | From logging config | Override root log level: DEBUG, INFO, WARNING, ERROR, CRITICAL        |
+| `--transport` | `stdio`            | Transport type: `stdio` (HTTP planned for future release)              |
+
+### Logging Configuration
+
+Logging is configured via `logging_conf.yaml` in the config directory. The file follows
+Python's standard `logging.config.dictConfig` format.
+
+Copy the provided template to get started:
+
+```bash
+cp conf/logging_conf.yaml.template <config-dir>/logging_conf.yaml
+```
+
+**Default behaviour (used when no `logging_conf.yaml` is present):**
+
+- Logs go to both `stderr` (console) and a rotating file at `./hypervisor-logs/hypervisor.log`
+- The log directory is created automatically if it does not exist
+- The resolved log file path is printed to `stderr` at startup
+- Root log level: `INFO`
+- File rotation: 10 MB per file, 5 backup files
+
+**Key tunable fields in `logging_conf.yaml`:**
+
+| Field | Default | Description |
+|:------|:--------|:------------|
+| `root.level` | `INFO` | Root log level (overridable with `--log-level`) |
+| `handlers.file_handler.filename` | `./hypervisor-logs/hypervisor.log` | Log file path (relative to CWD) |
+| `handlers.file_handler.maxBytes` | `10485760` (10 MB) | Max file size before rotation |
+| `handlers.file_handler.backupCount` | `5` | Number of backup files to keep |
+
+> **Note:** Logs must never go to `stdout` when using stdio transport — that stream is reserved for JSON-RPC responses.
 
 ### 3. Send a Request
 
@@ -153,7 +183,7 @@ uv run mypy src/
 ```
 adp-hypervisor/
 ├── pyproject.toml              # Project configuration
-├── conf/                       # Manifest templates
+├── conf/                       # Manifest templates (physical, semantic, policy, logging)
 ├── examples/                   # Ready-to-run demo (Docker + manifests)
 ├── src/adp_hypervisor/         # Main hypervisor package
 │   ├── server.py               # ADPServer main class

@@ -21,6 +21,7 @@ method routing, and response wrapping for the ADP server.
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -134,6 +135,8 @@ class Dispatcher:
             The JSON-RPC response string.
         """
         request_id: RequestId | None = None
+        method: str = "<unknown>"
+        start_s = time.monotonic()
 
         try:
             # Parse JSON
@@ -147,12 +150,23 @@ class Dispatcher:
             try:
                 request = JSONRPCRequest.model_validate(data)
                 request_id = request.id
+                method = request.method
             except ValidationError as e:
-                logger.warning("Invalid JSON-RPC request: %s", e)
+                logger.debug("Invalid JSON-RPC request: %s", e)
                 raise InvalidRequestError(f"Invalid request: {e}") from e
+
+            logger.debug("Dispatch: method=%s, request_id=%s", method, request_id)
 
             # Route to handler
             result = await self._route(request)
+
+            duration_ms = int((time.monotonic() - start_s) * 1000)
+            logger.debug(
+                "Dispatch: method=%s, request_id=%s, status=success, duration_ms=%d",
+                method,
+                request_id,
+                duration_ms,
+            )
 
             # Build success response
             response: JSONRPCResultResponse | JSONRPCErrorResponse = JSONRPCResultResponse(
@@ -161,11 +175,26 @@ class Dispatcher:
             )
 
         except ADPError as e:
-            logger.warning("ADP error: [%d] %s", e.code, e.message)
+            duration_ms = int((time.monotonic() - start_s) * 1000)
+            logger.warning(
+                "Dispatch: method=%s, request_id=%s, status=error, code=%d, "
+                "message=%s, duration_ms=%d",
+                method,
+                request_id,
+                e.code,
+                e.message,
+                duration_ms,
+            )
             response = self._build_error_response(request_id, e)
 
         except Exception as e:
-            logger.exception("Unexpected error during dispatch")
+            duration_ms = int((time.monotonic() - start_s) * 1000)
+            logger.exception(
+                "Dispatch: method=%s, request_id=%s, status=unexpected_error, duration_ms=%d",
+                method,
+                request_id,
+                duration_ms,
+            )
             error = InternalError(str(e))
             response = self._build_error_response(request_id, error)
 

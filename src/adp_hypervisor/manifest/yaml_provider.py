@@ -60,7 +60,11 @@ class YamlManifestProvider(ManifestProvider):
         self._physical = self._load_physical()
         self._semantic = self._load_semantic()
         self._policy = self._load_policy()
-        logger.info("Manifests loaded successfully")
+        logger.info(
+            "Manifests loaded: backends=%d, resources=%d",
+            len(self._physical.backends),
+            len(self._semantic.resources),
+        )
 
     def get_physical_manifest(self) -> PhysicalManifest:
         self._ensure_loaded()
@@ -88,6 +92,7 @@ class YamlManifestProvider(ManifestProvider):
             data = yaml.safe_load(f)
         if not isinstance(data, dict):
             raise ValueError(f"Expected a YAML mapping in {path}, got {type(data).__name__}")
+        logger.debug("Loaded YAML: %s (%d top-level keys)", path, len(data))
         return data
 
     def _load_physical(self) -> PhysicalManifest:
