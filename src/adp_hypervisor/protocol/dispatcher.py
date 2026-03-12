@@ -152,7 +152,7 @@ class Dispatcher:
                 request_id = request.id
                 method = request.method
             except ValidationError as e:
-                logger.warning("Invalid JSON-RPC request: %s", e)
+                logger.debug("Invalid JSON-RPC request: %s", e)
                 raise InvalidRequestError(f"Invalid request: {e}") from e
 
             logger.debug("Dispatch: method=%s, request_id=%s", method, request_id)
@@ -161,7 +161,7 @@ class Dispatcher:
             result = await self._route(request)
 
             duration_ms = int((time.monotonic() - start_s) * 1000)
-            logger.info(
+            logger.debug(
                 "Dispatch: method=%s, request_id=%s, status=success, duration_ms=%d",
                 method,
                 request_id,

@@ -123,6 +123,11 @@ def _load_logging_config(config_dir: Path) -> dict[str, Any]:
             raw = yaml.safe_load(logging_conf_path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 return raw
+            print(
+                f"Warning: {logging_conf_path} is not a YAML mapping (got {type(raw).__name__}), "
+                "using built-in logging defaults.",
+                file=sys.stderr,
+            )
         except (yaml.YAMLError, OSError):
             print(
                 f"Warning: failed to parse {logging_conf_path}, using built-in logging defaults.",

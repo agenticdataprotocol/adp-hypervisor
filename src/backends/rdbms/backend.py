@@ -21,6 +21,7 @@ dialect-specific hook methods.
 """
 
 import logging
+import time
 from abc import abstractmethod
 from typing import Any
 
@@ -219,14 +220,12 @@ class RDBMSBackend(Backend):
             raise ValueError(f"Resource {resource.resource_id!r} has no source definitions")
         sql, params = self._intent_to_sql(source, intent)
         logger.debug(
-            "Execute SQL: backend=%s, resource=%s, sql=%s, params=%s",
+            "Execute SQL: backend=%s, resource=%s, sql=%s, param_count=%d",
             self.backend_id,
             intent.resource_id,
             sql,
-            params,
+            len(params),
         )
-        import time
-
         start_s = time.monotonic()
         rows = await self.fetch_all(sql, params, source)
         duration_ms = int((time.monotonic() - start_s) * 1000)
