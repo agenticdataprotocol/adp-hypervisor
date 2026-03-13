@@ -1,0 +1,24 @@
+# License header check configuration.
+# Files matching include_patterns are required to have the copyright header.
+# Files matching exclude_patterns are skipped even if they match an include pattern.
+# Patterns use Python pathlib glob syntax (** matches across directory boundaries).
+# To add new file types or directories to check, edit this file instead of check-license.py.
+
+copyright_marker = "Copyright 2026 Datastrato, Inc."
+
+include_patterns = [
+    "src/**/*.py",
+    "tests/**/*.py",
+    "conf/**/*.yaml",
+    "examples/conf/**/*.yaml",
+    "tests/unit/manifest/fixtures/**/*.yaml",
+    ".github/workflows/*.yml",
+    "examples/**/*.sql",
+    "examples/**/*.js",
+    "examples/docker-compose.yml",
+    "scripts/*.py",
+]
+
+exclude_patterns = [
+    "examples/localfs/**",
+]

@@ -12,109 +12,63 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Check that all applicable source files contain the Apache License 2.0 header."""
+"""Check that all files matching include patterns have the required license header.
+
+Configuration is read from .license-check.toml in the project root.
+To add new file types or directories to check, edit .license-check.toml instead of this script.
+"""
 
 import sys
+import tomllib
 from pathlib import Path
 
-MARKER = "Copyright 2026 Datastrato, Inc."
 
-SCAN_RULES: list[tuple[str, list[str]]] = [
-    # (glob pattern, list of root directories to scan)
-    ("*.py", ["src", "tests"]),
-    ("*.yaml", ["conf", "examples/conf", "tests/unit/manifest/fixtures"]),
-    ("*.yml", [".github/workflows"]),
-    ("*.sql", ["examples"]),
-    ("*.js", ["examples"]),
-]
+def main() -> None:
+    root = Path(__file__).resolve().parent.parent
+    config_path = root / ".license-check.toml"
 
-EXTRA_FILES = [
-    "examples/docker-compose.yml",
-    "scripts/check-license.py",
-]
+    if not config_path.exists():
+        print(f"Error: config file not found: {config_path}")
+        sys.exit(1)
 
-EXCLUDE_DIRS = {
-    "node_modules",
-    ".venv",
-    "dist",
-    "sdist",
-    ".idea",
-    ".git",
-    "__pycache__",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".worktrees",
-}
+    with config_path.open("rb") as f:
+        config = tomllib.load(f)
 
-EXCLUDE_PATHS = {
-    "examples/localfs",
-}
+    marker: str = config.get("copyright_marker", "Copyright 2026 Datastrato, Inc.")
+    include_patterns: list[str] = config.get("include_patterns", [])
+    exclude_patterns: list[str] = config.get("exclude_patterns", [])
 
+    if not include_patterns:
+        print("Warning: no include_patterns defined in .license-check.toml, nothing to check.")
+        return
 
-def should_exclude(path: Path) -> bool:
-    parts = path.parts
-    for part in parts:
-        if part in EXCLUDE_DIRS:
-            return True
-    for excl in EXCLUDE_PATHS:
-        if str(path).startswith(excl):
-            return True
-    return False
+    included: set[Path] = set()
+    for pattern in include_patterns:
+        included.update(root.glob(pattern))
 
+    excluded: set[Path] = set()
+    for pattern in exclude_patterns:
+        excluded.update(root.glob(pattern))
 
-def collect_files(project_root: Path) -> list[Path]:
-    files: set[Path] = set()
-
-    for pattern, dirs in SCAN_RULES:
-        for dir_name in dirs:
-            search_root = project_root / dir_name
-            if not search_root.exists():
-                continue
-            for path in search_root.rglob(pattern):
-                if path.is_file() and not should_exclude(path.relative_to(project_root)):
-                    files.add(path)
-
-    for extra in EXTRA_FILES:
-        path = project_root / extra
-        if path.is_file():
-            files.add(path)
-
-    return sorted(files)
-
-
-def check_header(filepath: Path) -> bool:
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            content = f.read(2048)
-        return MARKER in content
-    except (OSError, UnicodeDecodeError):
-        return False
-
-
-def main() -> int:
-    project_root = Path(__file__).resolve().parent.parent
-
-    files = collect_files(project_root)
-    if not files:
-        print("WARNING: No files found to check.")
-        return 1
+    files_to_check = sorted(p for p in included - excluded if p.is_file())
 
     missing: list[Path] = []
-    for filepath in files:
-        if not check_header(filepath):
-            missing.append(filepath)
+    for file_path in files_to_check:
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if marker not in content:
+            missing.append(file_path.relative_to(root))
 
     if missing:
-        print(f"ERROR: {len(missing)} file(s) missing license header:\n")
-        for f in missing:
-            print(f"  {f.relative_to(project_root)}")
-        print(f"\nChecked {len(files)} files, {len(missing)} missing header.")
-        return 1
+        print(f"The following {len(missing)} file(s) are missing the license header ({marker!r}):")
+        for f in sorted(missing):
+            print(f"  {f}")
+        sys.exit(1)
 
-    print(f"OK: All {len(files)} files contain the license header.")
-    return 0
+    print(f"✓ All {len(files_to_check)} checked files have the required license header.")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
