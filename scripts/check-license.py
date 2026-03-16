@@ -12,109 +12,83 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Check that all applicable source files contain the Apache License 2.0 header."""
+"""Check that every file has the required license header.
+
+All files are included by default (RAT philosophy); only exclusion patterns are configurable.
+Configuration is read from .license-check.toml in the project root.
+"""
 
 import sys
 from pathlib import Path
 
-MARKER = "Copyright 2026 Datastrato, Inc."
-
-SCAN_RULES: list[tuple[str, list[str]]] = [
-    # (glob pattern, list of root directories to scan)
-    ("*.py", ["src", "tests"]),
-    ("*.yaml", ["conf", "examples/conf", "tests/unit/manifest/fixtures"]),
-    ("*.yml", [".github/workflows"]),
-    ("*.sql", ["examples"]),
-    ("*.js", ["examples"]),
-]
-
-EXTRA_FILES = [
-    "examples/docker-compose.yml",
-    "scripts/check-license.py",
-]
-
-EXCLUDE_DIRS = {
-    "node_modules",
-    ".venv",
-    "dist",
-    "sdist",
-    ".idea",
-    ".git",
-    "__pycache__",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".worktrees",
-}
-
-EXCLUDE_PATHS = {
-    "examples/localfs",
-}
-
-
-def should_exclude(path: Path) -> bool:
-    parts = path.parts
-    for part in parts:
-        if part in EXCLUDE_DIRS:
-            return True
-    for excl in EXCLUDE_PATHS:
-        if str(path).startswith(excl):
-            return True
-    return False
-
-
-def collect_files(project_root: Path) -> list[Path]:
-    files: set[Path] = set()
-
-    for pattern, dirs in SCAN_RULES:
-        for dir_name in dirs:
-            search_root = project_root / dir_name
-            if not search_root.exists():
-                continue
-            for path in search_root.rglob(pattern):
-                if path.is_file() and not should_exclude(path.relative_to(project_root)):
-                    files.add(path)
-
-    for extra in EXTRA_FILES:
-        path = project_root / extra
-        if path.is_file():
-            files.add(path)
-
-    return sorted(files)
-
-
-def check_header(filepath: Path) -> bool:
+try:
+    import tomllib
+except ModuleNotFoundError:
     try:
-        with open(filepath, encoding="utf-8") as f:
-            content = f.read(2048)
-        return MARKER in content
-    except (OSError, UnicodeDecodeError):
-        return False
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        print("Error: requires Python 3.11+ (built-in tomllib) or 'tomli': pip install tomli")
+        sys.exit(1)
 
 
-def main() -> int:
-    project_root = Path(__file__).resolve().parent.parent
+def main() -> None:
+    root = Path(__file__).resolve().parent.parent
+    config_path = root / ".license-check.toml"
 
-    files = collect_files(project_root)
-    if not files:
-        print("WARNING: No files found to check.")
-        return 1
+    if not config_path.exists():
+        print(f"Error: config file not found: {config_path}")
+        sys.exit(1)
+
+    with config_path.open("rb") as f:
+        try:
+            config = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            print(f"Error: failed to parse {config_path}: {e}")
+            sys.exit(1)
+
+    marker: str = config.get("copyright_marker", "Copyright 2026 Datastrato, Inc.")
+    exclude_patterns: list[str] = config.get("exclude_patterns", [])
+
+    if not isinstance(marker, str):
+        print(f"Error: 'copyright_marker' must be a string in {config_path}")
+        sys.exit(1)
+
+    if not isinstance(exclude_patterns, list) or not all(
+        isinstance(p, str) for p in exclude_patterns
+    ):
+        print(f"Error: 'exclude_patterns' must be a list of strings in {config_path}")
+        sys.exit(1)
+
+    # Include all files by default (RAT philosophy)
+    included: set[Path] = set(root.glob("**/*"))
+
+    excluded: set[Path] = set()
+    for pattern in exclude_patterns:
+        excluded.update(root.glob(pattern))
+
+    files_to_check = sorted(p for p in included - excluded if p.is_file() and not p.is_symlink())
 
     missing: list[Path] = []
-    for filepath in files:
-        if not check_header(filepath):
-            missing.append(filepath)
+    for file_path in files_to_check:
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            print(f"Warning: skipping non-UTF-8 file: {file_path.relative_to(root)}")
+            continue
+        except OSError as e:
+            print(f"Warning: skipping unreadable file: {file_path.relative_to(root)} ({e})")
+            continue
+        if marker not in content:
+            missing.append(file_path.relative_to(root))
 
     if missing:
-        print(f"ERROR: {len(missing)} file(s) missing license header:\n")
-        for f in missing:
-            print(f"  {f.relative_to(project_root)}")
-        print(f"\nChecked {len(files)} files, {len(missing)} missing header.")
-        return 1
+        print(f"The following {len(missing)} file(s) are missing the license header ({marker!r}):")
+        for f in sorted(missing):
+            print(f"  {f}")
+        sys.exit(1)
 
-    print(f"OK: All {len(files)} files contain the license header.")
-    return 0
+    print(f"✓ All {len(files_to_check)} checked files have the required license header.")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
