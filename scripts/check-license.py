@@ -27,7 +27,9 @@ except ModuleNotFoundError:
     try:
         import tomli as tomllib  # type: ignore[no-redef]
     except ModuleNotFoundError:
-        print("Error: requires Python 3.11+ (built-in tomllib) or install 'tomli' via: pip install tomli")
+        print(
+            "Error: requires Python 3.11+ (built-in tomllib) or 'tomli': pip install tomli"
+        )
         sys.exit(1)
 
 
@@ -53,7 +55,9 @@ def main() -> None:
         print(f"Error: 'copyright_marker' must be a string in {config_path}")
         sys.exit(1)
 
-    if not isinstance(exclude_patterns, list) or not all(isinstance(p, str) for p in exclude_patterns):
+    if not isinstance(exclude_patterns, list) or not all(
+        isinstance(p, str) for p in exclude_patterns
+    ):
         print(f"Error: 'exclude_patterns' must be a list of strings in {config_path}")
         sys.exit(1)
 
