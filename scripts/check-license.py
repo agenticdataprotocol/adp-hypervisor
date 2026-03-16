@@ -27,9 +27,7 @@ except ModuleNotFoundError:
     try:
         import tomli as tomllib  # type: ignore[no-redef]
     except ModuleNotFoundError:
-        print(
-            "Error: requires Python 3.11+ (built-in tomllib) or 'tomli': pip install tomli"
-        )
+        print("Error: requires Python 3.11+ (built-in tomllib) or 'tomli': pip install tomli")
         sys.exit(1)
 
 
