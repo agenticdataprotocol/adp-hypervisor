@@ -97,11 +97,18 @@ def _to_resource(curated: CuratedResource) -> Resource:
     )
 
 
+def _has_glob_chars(pattern: str) -> bool:
+    """Check whether *pattern* contains glob special characters."""
+    return any(ch in pattern for ch in ("*", "?", "["))
+
+
 def _ci_glob_match(value: str | None, pattern: str) -> bool:
-    """Case-insensitive glob match."""
+    """Case-insensitive match: substring when plain, fnmatch when globbed."""
     if value is None:
         return False
-    return fnmatch(value.lower(), pattern.lower())
+    if _has_glob_chars(pattern):
+        return fnmatch(value.lower(), pattern.lower())
+    return pattern.lower() in value.lower()
 
 
 def _matches_domain_prefix(resource: CuratedResource, domain_prefix: str) -> bool:
@@ -130,6 +137,7 @@ def _matches_keyword(resource: CuratedResource, keyword: str) -> bool:
     for tag in resource.tags or []:
         if _ci_glob_match(tag, keyword):
             return True
+    logger.debug("Resource %r filtered out by keyword %r", resource.resource_id, keyword)
     return False
 
 
