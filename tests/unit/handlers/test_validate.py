@@ -555,6 +555,175 @@ class TestValidateInvalidOperator(unittest.IsolatedAsyncioTestCase):
 
 
 # =============================================================================
+# Predicate Value Validation Tests
+# =============================================================================
+
+
+def _make_fields_with_vector() -> list[Field]:
+    return _make_fields() + [
+        Field(
+            field_id="embedding",
+            type=FieldType.VECTOR,
+            description="Vector embedding",
+        ),
+    ]
+
+
+class TestPredicateValueValidation(unittest.IsolatedAsyncioTestCase):
+    async def test_similar_with_bare_list_reports_invalid_value(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": [0.1, 0.9, 0.3],
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("correctionHint", issues[0])
+        self.assertIn("message", issues[0])
+
+    async def test_similar_with_empty_similar_value_reports_invalid_value(
+        self,
+    ) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("correctionHint", issues[0])
+        self.assertIn("message", issues[0])
+
+    async def test_similar_with_valid_vector_value(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {"vector": [0.1, 0.9, 0.3]},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+        value_issues = [i for i in data.get("issues", []) if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(value_issues), 0)
+
+    async def test_similar_with_valid_vector_and_top(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {"vector": [0.1, 0.9, 0.3], "top": 5},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertTrue(data["valid"])
+        value_issues = [i for i in data.get("issues", []) if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(value_issues), 0)
+
+    async def test_similar_with_scalar_value_reports_invalid_value(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": "test",
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("correctionHint", issues[0])
+        self.assertIn("message", issues[0])
+
+    async def test_similar_value_check_with_bare_predicate(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params_bare_predicate(
+                field_id="embedding",
+                op="SIMILAR",
+                value=[0.1, 0.9, 0.3],
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("correctionHint", issues[0])
+        self.assertIn("message", issues[0])
+
+
+# =============================================================================
 # Projection Validation Tests
 # =============================================================================
 

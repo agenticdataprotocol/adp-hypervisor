@@ -43,6 +43,7 @@ from adp_hypervisor.protocol.types import (
     PredicateOperator,
     QueryIntent,
     ReviseIntent,
+    SimilarValue,
     ValidateRequestParams,
     ValidateResult,
     ValidationIssue,
@@ -242,6 +243,7 @@ class ValidateHandler(Handler):
             self._check_field_exists(pred.field_id, field_map, issues)
             if pred.field_id in field_map:
                 self._check_operator(pred.field_id, pred.op, field_map, issues)
+                self._check_value(pred, field_map, issues)
 
         if intent.projections:
             self._check_projections(intent.projections, field_map, issues)
@@ -333,6 +335,56 @@ class ValidateHandler(Handler):
                     correction_hint=f"Allowed operators: {allowed_str}.",
                 )
             )
+
+    def _check_value(
+        self,
+        pred: Predicate,
+        field_map: dict[str, Field],
+        issues: list[ValidationIssue],
+    ) -> None:
+        """Check that a predicate value is compatible with the operator."""
+        if pred.op == PredicateOperator.SIMILAR:
+            if not isinstance(pred.value, SimilarValue):
+                issues.append(
+                    ValidationIssue(
+                        code=ValidationIssueCode.INVALID_VALUE,
+                        field=pred.field_id,
+                        severity=IssueSeverity.BLOCKING,
+                        message=(
+                            f"SIMILAR predicate on field '{pred.field_id}' "
+                            f"requires a SimilarValue object, got "
+                            f"{type(pred.value).__name__}."
+                        ),
+                        correction_hint=(
+                            "Use a SimilarValue object: "
+                            '{"vector": [<floats>], "top": <int>} '
+                            "for vector search, or "
+                            '{"text": "<query>", "top": <int>} for text '
+                            "similarity search."
+                        ),
+                    )
+                )
+            elif pred.value.vector is None and pred.value.text is None and pred.value.blob is None:
+                issues.append(
+                    ValidationIssue(
+                        code=ValidationIssueCode.INVALID_VALUE,
+                        field=pred.field_id,
+                        severity=IssueSeverity.BLOCKING,
+                        message=(
+                            f"SimilarValue for field '{pred.field_id}' must "
+                            f"have at least one of 'vector', 'text', or "
+                            f"'blob' set."
+                        ),
+                        correction_hint=(
+                            "Provide at least one search input: "
+                            '{"vector": [<floats>]} for pre-computed '
+                            "embeddings, "
+                            '{"text": "<query>"} for text similarity, or '
+                            '{"blob": "<base64>"} for binary content '
+                            "similarity."
+                        ),
+                    )
+                )
 
     def _validate_predicate_group(
         self,
