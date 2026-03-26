@@ -403,6 +403,75 @@ class TestDiscoverHandlerKeywordFilter(unittest.IsolatedAsyncioTestCase):
         data = result.model_dump(by_alias=True, exclude_none=True)
         self.assertEqual(data["resources"], [])
 
+    async def test_substring_match_resource_id(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="employees"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(len(data["resources"]), 1)
+        self.assertEqual(data["resources"][0]["resourceId"], "org.example.hr:employees")
+
+    async def test_substring_match_description(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="bank failure"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        resource_ids = {r["resourceId"] for r in data["resources"]}
+        self.assertIn("com.acme.finance:bank_failures", resource_ids)
+
+    async def test_substring_match_partial(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="employ"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        resource_ids = {r["resourceId"] for r in data["resources"]}
+        self.assertIn("org.example.hr:employees", resource_ids)
+
+    async def test_substring_match_case_insensitive(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="EMPLOYEE"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        resource_ids = {r["resourceId"] for r in data["resources"]}
+        self.assertIn("org.example.hr:employees", resource_ids)
+
+    async def test_glob_match_still_works(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="*bank*failure*"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        resource_ids = {r["resourceId"] for r in data["resources"]}
+        self.assertIn("com.acme.finance:bank_failures", resource_ids)
+
+    async def test_substring_match_tag(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="audit"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        resource_ids = {r["resourceId"] for r in data["resources"]}
+        self.assertIn("com.acme.finance:audit_events", resource_ids)
+
+    async def test_substring_no_match(self) -> None:
+        handler = DiscoverHandler(
+            manifest_index=_mock_manifest(), policy_enforcer=_mock_policy_enforcer()
+        )
+        result = await handler.handle(_make_params(keyword="nonexistent"))
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(data["resources"], [])
+
 
 # =============================================================================
 # Combined Filters (AND logic)
