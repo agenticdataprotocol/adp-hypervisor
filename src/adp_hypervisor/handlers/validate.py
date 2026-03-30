@@ -358,33 +358,62 @@ class ValidateHandler(Handler):
                         correction_hint=(
                             "Use a SimilarValue object: "
                             '{"vector": [<floats>], "top": <int>} '
-                            "for vector search, or "
-                            '{"text": "<query>", "top": <int>} for text '
-                            "similarity search."
+                            "for vector similarity search."
                         ),
                     )
                 )
-            elif pred.value.vector is None and pred.value.text is None and pred.value.blob is None:
-                issues.append(
-                    ValidationIssue(
-                        code=ValidationIssueCode.INVALID_VALUE,
-                        field=pred.field_id,
-                        severity=IssueSeverity.BLOCKING,
-                        message=(
-                            f"SimilarValue for field '{pred.field_id}' must "
-                            f"have at least one of 'vector', 'text', or "
-                            f"'blob' set."
-                        ),
-                        correction_hint=(
-                            "Provide at least one search input: "
-                            '{"vector": [<floats>]} for pre-computed '
-                            "embeddings, "
-                            '{"text": "<query>"} for text similarity, or '
-                            '{"blob": "<base64>"} for binary content '
-                            "similarity."
-                        ),
+            elif pred.value.vector is None:
+                if pred.value.text is not None:
+                    issues.append(
+                        ValidationIssue(
+                            code=ValidationIssueCode.INVALID_VALUE,
+                            field=pred.field_id,
+                            severity=IssueSeverity.BLOCKING,
+                            message=(
+                                f"Text-based similarity search on field "
+                                f"'{pred.field_id}' is not yet supported."
+                            ),
+                            correction_hint=(
+                                "Use vector-based similarity search instead: "
+                                '{"vector": [<floats>], "top": <int>}.'
+                            ),
+                        )
                     )
-                )
+                elif pred.value.blob is not None:
+                    issues.append(
+                        ValidationIssue(
+                            code=ValidationIssueCode.INVALID_VALUE,
+                            field=pred.field_id,
+                            severity=IssueSeverity.BLOCKING,
+                            message=(
+                                f"Blob-based similarity search on field "
+                                f"'{pred.field_id}' is not yet supported."
+                            ),
+                            correction_hint=(
+                                "Use vector-based similarity search instead: "
+                                '{"vector": [<floats>], "top": <int>}.'
+                            ),
+                        )
+                    )
+                else:
+                    issues.append(
+                        ValidationIssue(
+                            code=ValidationIssueCode.INVALID_VALUE,
+                            field=pred.field_id,
+                            severity=IssueSeverity.BLOCKING,
+                            message=(
+                                f"SimilarValue for field '{pred.field_id}' must "
+                                f"have at least one of 'vector', 'text', or "
+                                f"'blob' set."
+                            ),
+                            correction_hint=(
+                                "Provide a search input, e.g. "
+                                '{"vector": [<floats>]} for vector similarity '
+                                "search. Text and blob similarity are not yet "
+                                "supported."
+                            ),
+                        )
+                    )
 
     def _validate_predicate_group(
         self,

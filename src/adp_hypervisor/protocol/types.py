@@ -22,7 +22,7 @@ based on the JSON-RPC 2.0 protocol specification.
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 from pydantic.alias_generators import to_camel
 
@@ -226,16 +226,8 @@ class SimilarValue(ADPModel):
         description="Distance function (e.g., COSINE, L2, INNER_PRODUCT)",
     )
 
-    @model_validator(mode="after")
-    def _check_text_vector_exclusivity(self) -> "SimilarValue":
-        if self.text is not None and self.vector is not None:
-            raise ValueError("'text' and 'vector' are mutually exclusive in SimilarValue")
-        if self.text is not None:
-            raise ValueError(
-                "SimilarValue.text is not yet supported. "
-                "Use 'vector' with a pre-computed embedding instead."
-            )
-        return self
+    # TODO: Add model validator to enforce text/vector mutual exclusivity
+    #  once text-based similarity search is implemented.
 
 
 PredicateValue = str | int | float | bool | list[str | int | float | bool] | SimilarValue

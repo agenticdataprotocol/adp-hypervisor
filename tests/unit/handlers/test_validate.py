@@ -722,6 +722,87 @@ class TestPredicateValueValidation(unittest.IsolatedAsyncioTestCase):
         self.assertIn("correctionHint", issues[0])
         self.assertIn("message", issues[0])
 
+    async def test_similar_with_text_only_reports_not_yet_supported(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {"text": "hello world"},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("not yet supported", issues[0]["message"])
+        self.assertIn("correctionHint", issues[0])
+
+    async def test_similar_with_blob_only_reports_not_yet_supported(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {"blob": "raw-bytes-here"},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("not yet supported", issues[0]["message"])
+        self.assertIn("correctionHint", issues[0])
+
+    async def test_similar_with_threshold_only_reports_invalid_value(self) -> None:
+        resource = _make_resource(fields=_make_fields_with_vector())
+        handler = ValidateHandler(
+            manifest_index=_mock_manifest(resource=resource),
+            policy_enforcer=_mock_policy_enforcer(),
+        )
+        result = await handler.handle(
+            _make_query_params(
+                predicates=[
+                    {
+                        "fieldId": "embedding",
+                        "op": "SIMILAR",
+                        "value": {"threshold": 0.8},
+                    },
+                ]
+            )
+        )
+
+        data = result.model_dump(by_alias=True, exclude_none=True)
+        self.assertFalse(data["valid"])
+        issues = [i for i in data["issues"] if i["code"] == "INVALID_VALUE"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["field"], "embedding")
+        self.assertEqual(issues[0]["severity"], "BLOCKING")
+        self.assertIn("correctionHint", issues[0])
+        self.assertIn("message", issues[0])
+
 
 # =============================================================================
 # Projection Validation Tests
