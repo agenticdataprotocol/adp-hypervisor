@@ -230,13 +230,18 @@ class TestPredicateTypes(unittest.TestCase):
         similar = SimilarValue.model_validate({"vector": [0.1, 0.2], "distanceFunction": "COSINE"})
         self.assertEqual(similar.distance_function, "COSINE")
 
-    def test_similar_value_text_not_yet_supported(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "not yet supported"):
-            SimilarValue(text="hello world", top=5)
+    def test_similar_value_text_accepted_at_parse_time(self) -> None:
+        """Text is accepted at parse time; validation is deferred to the handler."""
+        sv = SimilarValue(text="hello world", top=5)
+        self.assertEqual(sv.text, "hello world")
+        self.assertIsNone(sv.vector)
 
-    def test_similar_value_text_and_vector_mutually_exclusive(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "mutually exclusive"):
-            SimilarValue(text="hello", vector=[0.1], top=5)
+    def test_similar_value_text_and_vector_accepted_at_parse_time(self) -> None:
+        """Both text and vector are accepted at parse time; mutual exclusivity is
+        enforced in the validate handler, not in the model validator."""
+        sv = SimilarValue(text="hello", vector=[0.1], top=5)
+        self.assertEqual(sv.text, "hello")
+        self.assertEqual(sv.vector, [0.1])
 
     def test_similar_value_neither_text_nor_vector_is_allowed(self) -> None:
         sv = SimilarValue(top=5)
