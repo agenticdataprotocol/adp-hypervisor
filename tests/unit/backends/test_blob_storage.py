@@ -1315,3 +1315,161 @@ class TestLocalFSBackendSubdirectory(unittest.IsolatedAsyncioTestCase):
             with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
                 with self.assertRaises(RuntimeError, msg="Absolute paths"):
                     await backend.execute(intent)
+
+
+# =============================================================================
+# TestLocalFSBackendPathLike
+# =============================================================================
+
+
+class TestLocalFSBackendPathLike(unittest.IsolatedAsyncioTestCase):
+    """Tests for LIKE / ILIKE predicates on the ``path`` field."""
+
+    async def test_query_path_like_top_level_extension_filter(self) -> None:
+        """path LIKE '%.txt' filters files by extension at the top level."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "readme.txt").write_text("r")
+            (source_dir / "notes.md").write_text("n")
+            (source_dir / "config.txt").write_text("c")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="%.txt")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"readme.txt", "config.txt"})
+
+    async def test_query_path_like_recursive_subdir_prefix(self) -> None:
+        """path LIKE 'docs/%' returns all entries under docs/ recursively."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            docs = source_dir / "docs"
+            docs.mkdir()
+            (docs / "intro.txt").write_text("i")
+            (docs / "guide.md").write_text("g")
+            (source_dir / "root.txt").write_text("r")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="docs/%")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"docs/intro.txt", "docs/guide.md"})
+
+    async def test_query_path_like_deep_nested(self) -> None:
+        """path LIKE 'a/b/%.csv' matches files at arbitrary depth."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            deep = source_dir / "a" / "b"
+            deep.mkdir(parents=True)
+            (deep / "report.csv").write_text("data")
+            (deep / "summary.txt").write_text("txt")
+            (source_dir / "a" / "other.csv").write_text("other")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="a/b/%.csv")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"a/b/report.csv"})
+
+    async def test_query_path_ilike_case_insensitive(self) -> None:
+        """path ILIKE '%.TXT' matches regardless of filename case."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "readme.txt").write_text("r")
+            (source_dir / "notes.md").write_text("n")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.ILIKE, value="%.TXT")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"readme.txt"})
+
+    async def test_query_path_like_respects_ignore_patterns(self) -> None:
+        """Ignored directories are not traversed during recursive path LIKE walk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "keep").mkdir()
+            (source_dir / "keep" / "file.txt").write_text("keep")
+            (source_dir / ".hidden").mkdir()
+            (source_dir / ".hidden" / "secret.txt").write_text("ignore")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, ignore_patterns=[".hidden"]))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="%.txt")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"keep/file.txt"})
