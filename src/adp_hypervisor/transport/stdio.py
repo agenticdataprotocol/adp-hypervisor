@@ -25,7 +25,7 @@ import logging
 import sys
 from collections.abc import AsyncIterator
 
-from adp_hypervisor.transport.base import Transport
+from adp_hypervisor.transport.base import MessageHandler, Transport
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,8 @@ class StdioTransport(Transport):
     """
     Stdio-based transport using newline-delimited JSON.
 
-    Reads JSON-RPC messages from stdin (one per line) and
-    writes JSON-RPC responses to stdout (one per line).
+    Reads JSON-RPC messages from stdin (one per line), dispatches each
+    through the provided message handler, and writes the response to stdout.
     """
 
     def __init__(
@@ -57,11 +57,51 @@ class StdioTransport(Transport):
         self._read_transport: asyncio.BaseTransport | None = None
         self._write_transport: asyncio.BaseTransport | None = None
 
-    async def start(self) -> None:
-        """Start the transport by connecting to stdin/stdout streams."""
+    async def start(self, message_handler: MessageHandler) -> None:
+        """Start the transport and serve requests.
+
+        Sets up stdin/stdout streams, then enters a message loop that
+        reads lines, dispatches through *message_handler*, and writes
+        responses.  Blocks until EOF or :meth:`stop` is called.
+
+        Args:
+            message_handler: Async callable that processes a JSON-RPC
+                message string and returns the response string.
+        """
         if self._running:
             return
 
+        await self._setup_streams()
+        self._running = True
+        logger.info("Stdio transport started")
+
+        try:
+            async for message in self._receive():
+                if not self._running:
+                    break
+                response = await message_handler(message)
+                await self._send(response)
+        finally:
+            self._running = False
+
+    async def stop(self) -> None:
+        """Stop the transport."""
+        if not self._running:
+            return
+
+        # Close the underlying transports to release the stdin/stdout pipes.
+        if self._read_transport is not None:
+            self._read_transport.close()
+            self._read_transport = None
+        if self._write_transport is not None:
+            self._write_transport.close()
+            self._write_transport = None
+
+        self._running = False
+        logger.info("Stdio transport stopped")
+
+    async def _setup_streams(self) -> None:
+        """Connect to stdin/stdout if not already injected."""
         if self._stdin is None:
             loop = asyncio.get_running_loop()
             self._stdin = asyncio.StreamReader()
@@ -86,28 +126,8 @@ class StdioTransport(Transport):
                 loop,
             )
 
-        self._running = True
-        logger.info("Stdio transport started")
-
-    async def stop(self) -> None:
-        """Stop the transport."""
-        if not self._running:
-            return
-
-        # Close the underlying transports to release the stdin/stdout pipes.
-        if self._read_transport is not None:
-            self._read_transport.close()
-            self._read_transport = None
-        if self._write_transport is not None:
-            self._write_transport.close()
-            self._write_transport = None
-
-        self._running = False
-        logger.info("Stdio transport stopped")
-
-    async def receive(self) -> AsyncIterator[str]:
-        """
-        Receive newline-delimited JSON messages from stdin.
+    async def _receive(self) -> AsyncIterator[str]:
+        """Receive newline-delimited JSON messages from stdin.
 
         Yields:
             Raw JSON-RPC message strings (without trailing newline).
@@ -136,9 +156,8 @@ class StdioTransport(Transport):
                 logger.exception("Error reading from stdin")
                 break
 
-    async def send(self, message: str) -> None:
-        """
-        Send a newline-delimited JSON message to stdout.
+    async def _send(self, message: str) -> None:
+        """Send a newline-delimited JSON message to stdout.
 
         Args:
             message: The JSON string to send.

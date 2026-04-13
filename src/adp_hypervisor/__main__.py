@@ -103,6 +103,17 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=_VALID_TRANSPORTS,
         help="Transport type (default: stdio)",
     )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Network interface to bind to (only used with --transport http, default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="HTTP port to listen on (only used with --transport http, default: 8000)",
+    )
     return parser
 
 
@@ -267,18 +278,25 @@ def main(args: list[str] | None = None) -> None:
     _configure_logging(config_dir, parsed.log_level)
 
     if parsed.transport == "http":
-        logger.error("HTTP transport is not yet implemented")
-        sys.exit(1)
+        from adp_hypervisor.transport.base import Transport
+        from adp_hypervisor.transport.http import HttpTransport
 
-    transport = StdioTransport()
+        transport: Transport = HttpTransport(host=parsed.host, port=parsed.port)
+    else:
+        transport = StdioTransport()
+
     provider = _create_yaml_provider(config_dir)
     role_resolver = _create_role_resolver(config_dir)
-    server = ADPServer(manifest_provider=provider, transport=transport, role_resolver=role_resolver)
+    server = ADPServer(
+        manifest_provider=provider,
+        transport=transport,
+        role_resolver=role_resolver,
+    )
 
     logger.info(
         "Starting ADP Hypervisor: config=%s, transport=%s, log_level=%s",
         parsed.config,
-        parsed.transport,
+        parsed.transport if parsed.transport != "http" else f"http://{parsed.host}:{parsed.port}",
         parsed.log_level or "from config",
     )
 

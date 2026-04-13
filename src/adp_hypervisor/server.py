@@ -140,7 +140,7 @@ class ADPServer:
         """Start the server.
 
         Loads manifests, initializes backends, registers handlers,
-        starts the transport, and enters the message loop.
+        and delegates to the transport's serve loop.
         """
         logger.info("Starting ADP Hypervisor server")
 
@@ -148,12 +148,11 @@ class ADPServer:
         await self._initialize_backends()
         self._register_handlers()
 
-        await self._transport.start()
         self._running = True
         logger.info("ADP Hypervisor server started, waiting for messages")
 
         try:
-            await self._message_loop()
+            await self._transport.start(self._dispatcher.dispatch)
         finally:
             await self.stop()
 
@@ -188,9 +187,10 @@ class ADPServer:
             loop.add_signal_handler(sig, _signal_handler)
 
         server_task = asyncio.create_task(self.start())
+        stop_task = asyncio.create_task(stop_event.wait())
 
         await asyncio.wait(
-            [server_task, asyncio.create_task(stop_event.wait())],
+            [server_task, stop_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
 
@@ -204,6 +204,13 @@ class ADPServer:
         else:
             # Propagate exceptions from start()
             server_task.result()
+
+        if not stop_task.done():
+            stop_task.cancel()
+            try:
+                await stop_task
+            except asyncio.CancelledError:
+                pass
 
     def _load_manifests(self) -> None:
         """Load manifests from the provider and build the index."""
@@ -268,11 +275,3 @@ class ADPServer:
             "Registered handlers: %s",
             ", ".join(self._dispatcher.get_registered_methods()),
         )
-
-    async def _message_loop(self) -> None:
-        """Read messages from transport and dispatch responses."""
-        async for message in self._transport.receive():
-            if not self._running:
-                break
-            response = await self._dispatcher.dispatch(message)
-            await self._transport.send(response)

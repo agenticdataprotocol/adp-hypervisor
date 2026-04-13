@@ -14,10 +14,14 @@
 
 """ADP Transport layer for message sending and receiving."""
 
-from adp_hypervisor.transport.base import Transport
+from adp_hypervisor.transport.base import MessageHandler, Transport
+from adp_hypervisor.transport.http import HttpTransport
 from adp_hypervisor.transport.stdio import StdioTransport
 
 __all__ = [
+    "MessageHandler",
     "Transport",
+    # Concrete transports
+    "HttpTransport",
     "StdioTransport",
 ]
