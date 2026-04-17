@@ -25,6 +25,7 @@ import fnmatch
 import logging
 import mimetypes
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -205,6 +206,9 @@ class LocalFSBackend(BlobStorageBackend):
         """Execute QUERY intent — list entries in a directory.
 
         Supports directory selection via a ``path EQ <dir>`` predicate.
+        When a ``path LIKE`` or ``path ILIKE`` predicate is present, entries are
+        collected recursively so that patterns crossing directory boundaries
+        (e.g. ``docs/%.txt``) can match.
         At most one ``path`` predicate is allowed per query.
 
         Args:
@@ -244,7 +248,14 @@ class LocalFSBackend(BlobStorageBackend):
         # Defer projections when order_by may reference non-projected fields.
         apply_projection_early = projection_set is not None and not intent.order_by
 
-        for child in sorted(listing_dir.iterdir(), key=lambda p: p.name):
+        use_recursive = self._has_path_like_predicate(filter_predicates)
+        children = (
+            self._iter_entries_recursive(listing_dir)
+            if use_recursive
+            else sorted(listing_dir.iterdir(), key=lambda p: p.name)
+        )
+
+        for child in children:
             if not self._config.allow_symlinks and child.is_symlink():
                 continue
 
@@ -631,6 +642,59 @@ class LocalFSBackend(BlobStorageBackend):
             raise RuntimeError(
                 f"Unsupported predicate operator for local filesystem backend: {pred.op!r}"
             )
+
+    @staticmethod
+    def _has_path_like_predicate(predicates: PredicateGroup | None) -> bool:
+        """Check recursively whether any predicate targets ``path`` with LIKE or ILIKE.
+
+        Args:
+            predicates: The predicate group to inspect.
+
+        Returns:
+            True if a ``path LIKE`` or ``path ILIKE`` predicate exists anywhere
+            in the group tree.
+        """
+        if predicates is None:
+            return False
+        for pred in predicates.predicates:
+            if isinstance(pred, Predicate):
+                if pred.field_id == "path" and pred.op in (
+                    PredicateOperator.LIKE,
+                    PredicateOperator.ILIKE,
+                ):
+                    return True
+            elif isinstance(pred, PredicateGroup):
+                if LocalFSBackend._has_path_like_predicate(pred):
+                    return True
+        return False
+
+    def _iter_entries_recursive(self, root: Path) -> Iterator[Path]:
+        """Yield all filesystem entries under *root* in deterministic traversal order.
+
+        Uses ``os.walk`` with ``topdown=True`` so that ignored directories are
+        pruned before being descended into, avoiding unnecessary I/O. Symbolic
+        links to directories are never followed; they appear as leaf entries
+        only, preventing directory escape and infinite cycles.
+
+        Each directory level yields files and subdirectories sorted by name,
+        matching the ordering used by the non-recursive listing path.
+
+        Args:
+            root: Directory to walk.
+
+        Yields:
+            Path objects for each filesystem entry (files and directories)
+            under root, in per-directory alphabetical order.
+        """
+        for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+            dir_path = Path(dirpath)
+            # Prune ignored directories in-place so os.walk does not descend
+            # into them, and sort for deterministic traversal order.
+            dirnames[:] = sorted(d for d in dirnames if not self._should_ignore(dir_path / d))
+            # Yield files and directories at this level mixed by name, matching
+            # the sort order of sorted(iterdir(), key=lambda p: p.name).
+            for name in sorted(filenames + dirnames):
+                yield dir_path / name
 
     def _pop_path_eq_predicate(
         self, predicates: PredicateGroup | None
