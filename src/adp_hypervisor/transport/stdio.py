@@ -85,10 +85,11 @@ class StdioTransport(Transport):
             self._running = False
 
     async def stop(self) -> None:
-        """Stop the transport."""
-        if not self._running:
-            return
+        """Stop the transport and release underlying pipe transports.
 
+        This method is idempotent — it can be called multiple times safely,
+        including after ``start()`` exits naturally (e.g. stdin EOF).
+        """
         # Close the underlying transports to release the stdin/stdout pipes.
         if self._read_transport is not None:
             self._read_transport.close()

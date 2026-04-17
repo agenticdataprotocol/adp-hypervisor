@@ -28,20 +28,32 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
+from adp_hypervisor.protocol.errors import INTERNAL_ERROR, INVALID_REQUEST
 from adp_hypervisor.transport.base import MessageHandler, Transport
 
 logger = logging.getLogger(__name__)
 
-_ERR_UNSUPPORTED_MEDIA = (
-    '{"jsonrpc":"2.0","error":{"code":-32700,"message":"Unsupported Media Type"},"id":null}'
-)
-_ERR_EMPTY_BODY = (
-    '{"jsonrpc":"2.0","error":{"code":-32700,"message":"Empty request body"},"id":null}'
-)
-_ERR_INVALID_ENCODING = (
-    '{"jsonrpc":"2.0","error":{"code":-32700,"message":"Invalid UTF-8 encoding"},"id":null}'
-)
-_ERR_INTERNAL = '{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":null}'
+
+def _jsonrpc_error_body(code: int, message: str) -> str:
+    """Build a compact JSON-RPC error response body.
+
+    Args:
+        code: JSON-RPC error code.
+        message: Human-readable error message.
+
+    Returns:
+        A minimal JSON-RPC error response string.
+    """
+    return json.dumps(
+        {"jsonrpc": "2.0", "error": {"code": code, "message": message}, "id": None},
+        separators=(",", ":"),
+    )
+
+
+_ERR_UNSUPPORTED_MEDIA = _jsonrpc_error_body(INVALID_REQUEST, "Unsupported Media Type")
+_ERR_EMPTY_BODY = _jsonrpc_error_body(INVALID_REQUEST, "Empty request body")
+_ERR_INVALID_ENCODING = _jsonrpc_error_body(INVALID_REQUEST, "Invalid UTF-8 encoding")
+_ERR_INTERNAL = _jsonrpc_error_body(INTERNAL_ERROR, "Internal error")
 
 
 class HttpTransport(Transport):
@@ -50,7 +62,7 @@ class HttpTransport(Transport):
     Serves JSON-RPC requests via ``POST /adp`` endpoint.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8000) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: int = 8000) -> None:
         """Initialize the HTTP transport.
 
         Args:
@@ -99,11 +111,9 @@ class HttpTransport(Transport):
 
         async def _adp_endpoint(request: Request) -> Response:
             """Handle POST /adp requests."""
-            if request.method != "POST":
-                return Response(status_code=405)
-
             content_type = request.headers.get("content-type", "")
-            if "application/json" not in content_type:
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            if media_type != "application/json":
                 return Response(
                     content=_ERR_UNSUPPORTED_MEDIA,
                     media_type="application/json",
@@ -152,12 +162,18 @@ class HttpTransport(Transport):
     def _inject_authorization(body_str: str, auth_value: str) -> str:
         """Inject the Authorization header value into JSON-RPC params._meta.
 
+        HTTP clients send credentials in the ``Authorization`` header, but the
+        JSON-RPC dispatcher is transport-agnostic.  Injecting the value into
+        ``params._meta.authorization`` lets authentication middleware (e.g.
+        ``BasicAuthenticator``) work identically for both stdio and HTTP
+        transports without coupling the dispatcher to HTTP semantics.
+
         If JSON parsing fails, the original body is returned unchanged so the
         dispatcher can report the parse error.
 
         Args:
             body_str: Raw JSON-RPC request body.
-            auth_value: Value of the Authorization header.
+            auth_value: Value of the HTTP ``Authorization`` header.
 
         Returns:
             The (possibly modified) JSON string.

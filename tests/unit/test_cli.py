@@ -40,7 +40,7 @@ class TestCliParser(unittest.TestCase):
         self.assertEqual(parsed.transport, "http")
 
     def test_parser_host_default(self) -> None:
-        """Default host should be '127.0.0.1'."""
+        """Default host should be '0.0.0.0'."""
         parsed = self.parser.parse_args(["--config", "/dummy"])
         self.assertEqual(parsed.host, "0.0.0.0")
 
