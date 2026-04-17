@@ -1473,3 +1473,71 @@ class TestLocalFSBackendPathLike(unittest.IsolatedAsyncioTestCase):
 
             paths = {r["path"] for r in result.rows}
             self.assertEqual(paths, {"keep/file.txt"})
+
+    async def test_query_path_like_symlinked_dir_not_followed(self) -> None:
+        """Symlinked directories are not followed during recursive walk.
+
+        The symlinked directory itself appears as an entry but its contents
+        are not traversed, preventing directory escape.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            external_dir = Path(tmpdir) / "external"
+            external_dir.mkdir()
+            (external_dir / "secret.txt").write_text("secret")
+
+            # symlink inside source pointing to external directory
+            (source_dir / "link").symlink_to(external_dir)
+            (source_dir / "real.txt").write_text("real")
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, allow_symlinks=True))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="%.txt")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            # secret.txt inside the symlinked dir must not appear
+            self.assertNotIn("link/secret.txt", paths)
+            self.assertIn("real.txt", paths)
+
+    async def test_query_path_like_symlink_loop_does_not_hang(self) -> None:
+        """A self-referential symlink inside source does not cause infinite recursion."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "data"
+            source_dir.mkdir()
+            (source_dir / "file.txt").write_text("hello")
+            # Symlink pointing back to source_dir itself
+            (source_dir / "loop").symlink_to(source_dir)
+
+            backend = LocalFSBackend(_make_definition(uri=tmpdir, allow_symlinks=True))
+            await backend.connect()
+
+            intent = QueryIntent(
+                intent_class="QUERY",
+                resource_id=_RID,
+                predicates=PredicateGroup(
+                    predicates=[
+                        Predicate(field_id="path", op=PredicateOperator.LIKE, value="%.txt")
+                    ],
+                    op=LogicOperator.AND,
+                ),
+            )
+            mock_index = _mock_manifest_index("data")
+            with patch(_MANIFEST_INDEX_PATH, return_value=mock_index):
+                result = await backend.execute(intent)
+
+            paths = {r["path"] for r in result.rows}
+            self.assertEqual(paths, {"file.txt"})

@@ -25,6 +25,7 @@ import fnmatch
 import logging
 import mimetypes
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -667,33 +668,33 @@ class LocalFSBackend(BlobStorageBackend):
                     return True
         return False
 
-    def _iter_entries_recursive(self, root: Path) -> list[Path]:
-        """Yield all filesystem entries under *root* in sorted order.
+    def _iter_entries_recursive(self, root: Path) -> Iterator[Path]:
+        """Yield all filesystem entries under *root* in deterministic traversal order.
 
         Uses ``os.walk`` with ``topdown=True`` so that ignored directories are
-        pruned before being descended into, avoiding unnecessary I/O.
+        pruned before being descended into, avoiding unnecessary I/O. Symbolic
+        links to directories are never followed; they appear as leaf entries
+        only, preventing directory escape and infinite cycles.
 
-        Symlink following is controlled by ``allow_symlinks`` config.
+        Each directory level yields files and subdirectories sorted by name,
+        matching the ordering used by the non-recursive listing path.
 
         Args:
             root: Directory to walk.
 
-        Returns:
-            Sorted list of Path objects (files and directories) under root.
+        Yields:
+            Path objects for each filesystem entry (files and directories)
+            under root, in per-directory alphabetical order.
         """
-        entries: list[Path] = []
-        for dirpath, dirnames, filenames in os.walk(
-            root, topdown=True, followlinks=self._config.allow_symlinks
-        ):
+        for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
             dir_path = Path(dirpath)
-            # Sort for deterministic traversal order; prune ignored directories
-            # in-place so os.walk does not descend into them.
+            # Prune ignored directories in-place so os.walk does not descend
+            # into them, and sort for deterministic traversal order.
             dirnames[:] = sorted(d for d in dirnames if not self._should_ignore(dir_path / d))
-            for name in sorted(filenames):
-                entries.append(dir_path / name)
-            for name in dirnames:
-                entries.append(dir_path / name)
-        return entries
+            # Yield files and directories at this level mixed by name, matching
+            # the sort order of sorted(iterdir(), key=lambda p: p.name).
+            for name in sorted(filenames + dirnames):
+                yield dir_path / name
 
     def _pop_path_eq_predicate(
         self, predicates: PredicateGroup | None
