@@ -25,6 +25,11 @@ from adp_hypervisor.transport.stdio import StdioTransport
 # =============================================================================
 
 
+async def _noop_handler(msg: str) -> str:
+    """No-op message handler that returns an empty JSON object."""
+    return "{}"
+
+
 def _make_streams() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     """Create a connected StreamReader/StreamWriter pair for testing."""
     reader = asyncio.StreamReader()
@@ -33,7 +38,7 @@ def _make_streams() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     write_transport = _MemoryWriteTransport()
     protocol = asyncio.StreamReaderProtocol(reader)
     loop = asyncio.get_event_loop()
-    writer = asyncio.StreamWriter(write_transport, protocol, reader, loop)  # type: ignore[arg-type]
+    writer = asyncio.StreamWriter(write_transport, protocol, reader, loop)
 
     return reader, writer
 
@@ -69,22 +74,45 @@ class TestStdioTransportLifecycle(unittest.IsolatedAsyncioTestCase):
 
     async def test_start_with_injected_streams(self) -> None:
         reader, writer = _make_streams()
+        reader.feed_eof()
         transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
-        self.assertTrue(transport._running)
+        await transport.start(_noop_handler)
+        # start() blocks until EOF, then sets _running = False in finally
+        self.assertFalse(transport._running)
 
     async def test_start_is_idempotent(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
-        await transport.start()
+
+        task = asyncio.create_task(transport.start(_noop_handler))
+        for _ in range(50):
+            if transport._running:
+                break
+            await asyncio.sleep(0.01)
         self.assertTrue(transport._running)
+
+        # Second call returns immediately because _running is already True
+        await transport.start(_noop_handler)
+        self.assertTrue(transport._running)
+
+        reader.feed_eof()
+        await task
 
     async def test_stop(self) -> None:
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+
+        task = asyncio.create_task(transport.start(_noop_handler))
+        for _ in range(50):
+            if transport._running:
+                break
+            await asyncio.sleep(0.01)
+        self.assertTrue(transport._running)
+
         await transport.stop()
+        # Feed EOF to unblock readline so the message loop can exit
+        reader.feed_eof()
+        await task
         self.assertFalse(transport._running)
 
     async def test_stop_when_not_started(self) -> None:
@@ -102,48 +130,50 @@ class TestStdioTransportLifecycle(unittest.IsolatedAsyncioTestCase):
 class TestStdioTransportSend(unittest.IsolatedAsyncioTestCase):
     """Tests for sending messages."""
 
-    async def test_send_appends_newline(self) -> None:
+    async def _setup_transport(
+        self,
+    ) -> tuple[StdioTransport, _MemoryWriteTransport]:
+        """Create a transport with injected streams ready for _send() calls."""
         reader, writer = _make_streams()
-        write_transport: _MemoryWriteTransport = writer.transport  # type: ignore[assignment]
+        mem_transport: _MemoryWriteTransport = writer.transport  # type: ignore[assignment]
         transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        await transport._setup_streams()
+        transport._running = True
+        return transport, mem_transport
+
+    async def test_send_appends_newline(self) -> None:
+        transport, mem = await self._setup_transport()
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}})
-        await transport.send(msg)
+        await transport._send(msg)
 
-        output = write_transport.buffer.decode("utf-8")
+        output = mem.buffer.decode("utf-8")
         self.assertTrue(output.endswith("\n"))
         self.assertEqual(output.strip(), msg)
 
     async def test_send_strips_extra_trailing_newline(self) -> None:
-        reader, writer = _make_streams()
-        write_transport: _MemoryWriteTransport = writer.transport  # type: ignore[assignment]
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, mem = await self._setup_transport()
 
         msg = '{"jsonrpc":"2.0","id":1,"result":{}}\n'
-        await transport.send(msg)
+        await transport._send(msg)
 
-        output = write_transport.buffer.decode("utf-8")
+        output = mem.buffer.decode("utf-8")
         # Should have exactly one trailing newline, not two
         self.assertEqual(output, '{"jsonrpc":"2.0","id":1,"result":{}}\n')
 
     async def test_send_without_start_raises(self) -> None:
         transport = StdioTransport()
         with self.assertRaisesRegex(RuntimeError, "Transport not started"):
-            await transport.send("test")
+            await transport._send("test")
 
     async def test_send_multiple_messages(self) -> None:
-        reader, writer = _make_streams()
-        write_transport: _MemoryWriteTransport = writer.transport  # type: ignore[assignment]
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, mem = await self._setup_transport()
 
         messages = [json.dumps({"jsonrpc": "2.0", "id": i, "result": {}}) for i in range(3)]
         for msg in messages:
-            await transport.send(msg)
+            await transport._send(msg)
 
-        output = write_transport.buffer.decode("utf-8")
+        output = mem.buffer.decode("utf-8")
         lines = output.strip().split("\n")
         self.assertEqual(len(lines), 3)
         for i, line in enumerate(lines):
@@ -158,26 +188,30 @@ class TestStdioTransportSend(unittest.IsolatedAsyncioTestCase):
 class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
     """Tests for receiving messages."""
 
-    async def test_receive_single_message(self) -> None:
+    async def _setup_transport(self) -> tuple[StdioTransport, asyncio.StreamReader]:
+        """Create a transport with injected streams ready for _receive() calls."""
         reader, writer = _make_streams()
         transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        await transport._setup_streams()
+        transport._running = True
+        return transport, reader
+
+    async def test_receive_single_message(self) -> None:
+        transport, reader = await self._setup_transport()
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "test"})
         reader.feed_data((msg + "\n").encode("utf-8"))
         reader.feed_eof()
 
         received: list[str] = []
-        async for message in transport.receive():
+        async for message in transport._receive():
             received.append(message)
 
         self.assertEqual(len(received), 1)
         self.assertEqual(json.loads(received[0])["method"], "test")
 
     async def test_receive_multiple_messages(self) -> None:
-        reader, writer = _make_streams()
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, reader = await self._setup_transport()
 
         messages = [
             json.dumps({"jsonrpc": "2.0", "id": i, "method": f"test.{i}"}) for i in range(3)
@@ -187,7 +221,7 @@ class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
         reader.feed_eof()
 
         received: list[str] = []
-        async for message in transport.receive():
+        async for message in transport._receive():
             received.append(message)
 
         self.assertEqual(len(received), 3)
@@ -195,9 +229,7 @@ class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(json.loads(msg)["method"], f"test.{i}")
 
     async def test_receive_skips_empty_lines(self) -> None:
-        reader, writer = _make_streams()
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, reader = await self._setup_transport()
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "test"})
         data = f"\n\n{msg}\n\n"
@@ -205,20 +237,18 @@ class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
         reader.feed_eof()
 
         received: list[str] = []
-        async for message in transport.receive():
+        async for message in transport._receive():
             received.append(message)
 
         self.assertEqual(len(received), 1)
 
     async def test_receive_handles_eof(self) -> None:
-        reader, writer = _make_streams()
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, reader = await self._setup_transport()
 
         reader.feed_eof()
 
         received: list[str] = []
-        async for message in transport.receive():
+        async for message in transport._receive():
             received.append(message)
 
         self.assertEqual(len(received), 0)
@@ -226,19 +256,17 @@ class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
     async def test_receive_without_start_raises(self) -> None:
         transport = StdioTransport()
         with self.assertRaisesRegex(RuntimeError, "Transport not started"):
-            async for _ in transport.receive():
+            async for _ in transport._receive():
                 pass
 
     async def test_receive_stops_when_transport_stopped(self) -> None:
-        reader, writer = _make_streams()
-        transport = StdioTransport(stdin=reader, stdout=writer)
-        await transport.start()
+        transport, reader = await self._setup_transport()
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "test"})
         reader.feed_data((msg + "\n").encode("utf-8"))
 
         received: list[str] = []
-        async for message in transport.receive():
+        async for message in transport._receive():
             received.append(message)
             await transport.stop()
 
@@ -253,35 +281,21 @@ class TestStdioTransportReceive(unittest.IsolatedAsyncioTestCase):
 class TestStdioTransportRoundTrip(unittest.IsolatedAsyncioTestCase):
     """Tests for full send/receive round-trip."""
 
-    async def test_send_then_receive(self) -> None:
-        """Verify that sent messages can be received via a connected pair."""
-        # Create two transports: one sends, the other receives
-        shared_reader = asyncio.StreamReader()
-        write_transport = _MemoryWriteTransport()
-        protocol = asyncio.StreamReaderProtocol(shared_reader)
-        loop = asyncio.get_event_loop()
-        shared_writer = asyncio.StreamWriter(
-            write_transport, protocol, shared_reader, loop  # type: ignore[arg-type]
-        )
-
-        sender_stdin, _ = _make_streams()
-        sender = StdioTransport(stdin=sender_stdin, stdout=shared_writer)
-        await sender.start()
+    async def test_start_processes_and_responds(self) -> None:
+        """Verify that start() receives messages, dispatches to handler, and sends responses."""
+        reader, writer = _make_streams()
+        write_transport: _MemoryWriteTransport = writer.transport  # type: ignore[assignment]
+        transport = StdioTransport(stdin=reader, stdout=writer)
 
         msg = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "adp.ping"})
-        await sender.send(msg)
+        reader.feed_data((msg + "\n").encode("utf-8"))
+        reader.feed_eof()
 
-        # Feed the written bytes into the reader for the receiving side
-        shared_reader.feed_data(bytes(write_transport.buffer))
-        shared_reader.feed_eof()
+        async def echo_handler(message: str) -> str:
+            return message
 
-        receiver = StdioTransport(stdin=shared_reader, stdout=shared_writer)
-        await receiver.start()
+        await transport.start(echo_handler)
 
-        received: list[str] = []
-        async for message in receiver.receive():
-            received.append(message)
-
-        self.assertEqual(len(received), 1)
-        parsed = json.loads(received[0])
+        output = write_transport.buffer.decode("utf-8").strip()
+        parsed = json.loads(output)
         self.assertEqual(parsed["method"], "adp.ping")

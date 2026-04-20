@@ -21,34 +21,31 @@ over different communication channels (stdio, HTTP, etc.).
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import Awaitable, Callable
+
+MessageHandler = Callable[[str], Awaitable[str]]
+"""Async callable that processes a JSON-RPC message and returns a response."""
 
 
 class Transport(ABC):
-    """Transport layer abstract base class."""
+    """Transport layer abstract base class.
+
+    Each transport implementation owns its serve loop.  The server calls
+    ``start(message_handler)`` which blocks until the transport is stopped.
+    """
 
     @abstractmethod
-    async def start(self) -> None:
-        """Start the transport, preparing it to send and receive messages."""
+    async def start(self, message_handler: MessageHandler) -> None:
+        """Start the transport and serve requests.
+
+        The method should block until :meth:`stop` is called or the
+        transport reaches a natural end (e.g. stdin EOF).
+
+        Args:
+            message_handler: Async callable that accepts a raw JSON-RPC
+                message string and returns the response string.
+        """
 
     @abstractmethod
     async def stop(self) -> None:
         """Stop the transport and release any resources."""
-
-    @abstractmethod
-    def receive(self) -> AsyncIterator[str]:
-        """
-        Receive messages as an async iterator of JSON strings.
-
-        Yields:
-            Raw JSON-RPC message strings.
-        """
-
-    @abstractmethod
-    async def send(self, message: str) -> None:
-        """
-        Send a message.
-
-        Args:
-            message: The JSON string to send.
-        """

@@ -31,7 +31,7 @@ from testcontainers.postgres import PostgresContainer
 
 from adp_hypervisor.manifest.yaml_provider import YamlManifestProvider
 from adp_hypervisor.server import ADPServer
-from adp_hypervisor.transport.base import Transport
+from adp_hypervisor.transport.base import MessageHandler, Transport
 
 # =============================================================================
 # Module-level fixtures
@@ -175,23 +175,19 @@ class _InMemoryTransport(Transport):
         self._responses: list[str] = []
         self._running = False
 
-    async def start(self) -> None:
+    async def start(self, message_handler: MessageHandler) -> None:
         self._running = True
-
-    async def stop(self) -> None:
-        self._running = False
-
-    async def receive(self) -> Any:
         while self._running:
             try:
                 msg = await asyncio.wait_for(self._requests.get(), timeout=0.5)
-                yield msg
+                response = await message_handler(msg)
+                self._responses.append(response)
             except TimeoutError:
                 if not self._running:
                     break
 
-    async def send(self, message: str) -> None:
-        self._responses.append(message)
+    async def stop(self) -> None:
+        self._running = False
 
     def enqueue(self, message: str) -> None:
         """Enqueue a request message to be received by the server."""
